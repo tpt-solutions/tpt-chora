@@ -1,0 +1,177 @@
+Design Document: tpt-chora (Full Scope)
+Status: Definitive Architecture
+Ecosystem: TPT (TPT Solutions)
+Dependencies: tpt-archon (Substrate), tpt-eidos (Form/Layout/Semantics), tpt-telos (Logic/State)
+1. Executive Summary
+tpt-chora is the all-encompassing, proof-native, GPU-accelerated presentation, interaction, and media runtime for the TPT ecosystem. It entirely replaces the traditional browser rendering pipeline.
+tpt-chora natively handles 2D/3D UI rendering, complex typography, spatial computing (XR), hardware-accelerated media, multi-modal input (touch, gaze, haptics), and OS-level accessibility. It operates strictly as the "receptacle," reading zero-copy memory from tpt-archon, consuming proven geometry and semantics from tpt-eidos, and executing stateful interactions via tpt-telos.
+2. Core Architecture & Subsystems
+tpt-chora is divided into six tightly integrated, concurrent subsystems. All subsystems share the same zero-copy memory space provided by tpt-archon.
+2.1. The Core Rendering Engine (The Canvas)
+The foundational GPU pipeline responsible for rasterizing geometry, managing framebuffers, and executing shaders.
+API: wgpu (mapping to Vulkan, Metal, DX12, and WebGPU).
+Render Graph: A frame-scoped, dependency-tracked render graph that automatically optimizes render passes, handles transient resources, and eliminates GPU pipeline stalls.
+Vector Graphics: Native, GPU-accelerated resolution-independent vector rendering (replacing SVG). Bezier curves and paths are tessellated on the GPU using compute shaders.
+Post-Processing: A built-in pipeline for bloom, depth of field, motion blur, and color grading, driven by tpt-eidos's visual constraints.
+2.2. The Typography & Text Engine (The Voice)
+Text rendering without a DOM is historically difficult. tpt-chora solves this with a fully GPU-driven, resolution-independent text pipeline.
+Shaping & Layout: tpt-eidos handles the complex text shaping (kerning, ligatures, RTL/bidi algorithms) using a native Rust shaper (e.g., rustybuzz), proving that text fits within its allocated bounding box.
+Rasterization (SDF): Fonts are pre-compiled into Signed Distance Field (SDF) atlases on the GPU. This allows text to be scaled infinitely without pixelation, using a single fragment shader.
+Sub-pixel Rendering: Native support for LCD sub-pixel rendering and gamma-correct blending for crisp text on any display.
+Complex Scripts: Full support for complex Indic, Arabic, and CJK scripts, handled natively without falling back to OS text rasterizers.
+2.3. The Spatial & 3D Engine (The Depth)
+tpt-chora is dimension-agnostic. It natively supports true 3D spatial computing, bridging the gap between flat screens and XR headsets.
+Stereoscopic Rendering: Native support for dual-view rendering for VR/AR headsets, with automated asymmetric frustum projection.
+Foveated Rendering: Integrates with eye-tracking to render high-resolution graphics only where the user is looking, drastically reducing GPU load.
+Volumetric Lighting & Shadows: Real-time shadow mapping and global illumination calculated via GPU compute shaders, respecting the physical elevation property defined in tpt-eidos.
+Spatial Audio: Integration with a 3D audio engine (e.g., rodio or native OpenAL bindings) where audio sources are mapped to 3D coordinates in the Chora-IR, automatically calculating HRTF (Head-Related Transfer Function) based on head tracking.
+2.4. The Input & Interaction Engine (The Senses)
+Abstracts all hardware inputs into a unified, capability-based event stream.
+Device Abstraction: Unified handling of Mouse, Keyboard, Touch, Pen/Stylus, Gamepads, and XR Controllers.
+Gaze & Gesture Tracking: Native integration with XR tracking APIs. "Click" is abstracted into a higher-level intent: Gaze + Pinch, Mouse Down, or Touch Tap.
+Hit Testing: GPU-accelerated spatial hit testing. Instead of traversing a DOM tree, tpt-chora uses the depth buffer and bounding volume hierarchies (BVH) to instantly determine which 3D/2D component was interacted with.
+Haptics: Direct routing of interaction events to OS-level haptic feedback APIs (CoreHaptics, Android Vibrator, XR Controller rumble).
+2.5. The Accessibility & Semantics Engine (The Bridge)
+This is the most critical subsystem for replacing the web. Without a DOM, screen readers and OS accessibility tools need a new target.
+The Semantic Tree: tpt-eidos emits a parallel "Semantic IR" alongside the visual Chora-IR. This tree contains no visual data, only logical roles (Button, Heading, Text), states (Focused, Expanded), and relationships.
+OS Bridging: tpt-chora maintains a live, two-way bridge to native OS accessibility frameworks (UIAutomation on Windows, Accessibility API on macOS, UIAutomator on Android).
+Focus Management: A mathematically proven focus-traversal algorithm (handled by tpt-eidos) ensures that keyboard and switch-device navigation is logically sound and never traps the user.
+2.6. The Media & Asset Pipeline (The Content)
+Hardware-accelerated decoding and streaming of heavy assets.
+Image Decoding: Asynchronous, multi-threaded decoding of JPEG, PNG, WebP, and AVIF directly into GPU-ready texture formats.
+Video Playback: Integration with hardware video decoding APIs (VA-API, VideoToolbox, MediaCodec). Video frames are decoded directly into shared memory and mapped to GPU textures with zero-copy, enabling 4K/8K video playback with minimal CPU overhead.
+Asset Streaming: Predictive asset loading. tpt-chora analyzes the Chora-IR and pre-fetches textures and meshes for components just outside the viewport.
+3. Integration Contracts (The TPT Trinity)
+How tpt-chora consumes the rest of the stack without breaking the zero-copy paradigm.
+3.1. Consuming tpt-eidos (The Form)
+tpt-eidos outputs two distinct Intermediate Representations (IR) per frame:
+
+// 1. The Visual IR (Chora-IR) - Sent to the Core Rendering Engine
+pub struct ChoraVisualNode {
+    pub transform: Mat4,
+    pub geometry: GpuMeshHandle,
+    pub material: GpuMaterialHandle,
+    pub clip_mask: GpuTextureHandle, // For complex clipping/masking
+    pub z_depth: f32,
+}
+
+// 2. The Semantic IR (A11y-IR) - Sent to the Accessibility Engine
+pub struct ChoraSemanticNode {
+    pub role: AccessibilityRole, // Button, Link, Image, etc.
+    pub label: StringId,         // Pointer to Archon string pool
+    pub state: BitFlags,         // Focused, Disabled, Checked
+    pub bounding_box_2d: Rect,   // For screen reader highlight boxes
+    pub children: Vec<NodeId>,
+}
+
+3.2. Consuming tpt-archon (The Substrate)
+tpt-chora never allocates its own UI state. It maps tpt-archon pages directly into GPU buffers.
+
+// Zero-Copy GPU Buffer Mapping
+impl ChoraRuntime {
+    pub fn bind_state_to_gpu(&self, archon_page: &ArchonPage) -> GpuBuffer {
+        // The GPU reads directly from Archon's page cache.
+        // No serialization. No copying.
+        self.gpu.create_buffer_mapped(archon_page.as_slice())
+    }
+}
+
+3.3. Consuming tpt-telos (The Purpose)
+When the Input Engine registers a hit (e.g., a user clicks a button), it doesn't trigger a DOM event. It triggers a tpt-telos state transition.
+
+// Input Engine -> Telos
+pub fn on_interaction(&mut self, event: InputEvent, target: NodeId) {
+    // 1. Hit test confirms target is interactable (via Eidos proofs)
+    // 2. Telos processes the intent
+    let state_mutation = self.telos.process_event(target, event);
+    
+    // 3. Mutation is applied directly to Archon memory
+    self.archon.apply_mutation(state_mutation);
+    
+    // 4. Next frame, Eidos re-proves layout, Chora re-renders.
+}
+
+4. Security, Sandboxing, & Capabilities
+Because tpt-chora renders arbitrary UI (potentially from untrusted sources), it enforces a strict, mathematically verified capability model.
+Viewport Isolation: No component can draw outside its tpt-eidos-proven bounding box. The GPU scissor test and stencil buffers are hardware-enforced per component.
+Memory Capabilities: A component's shaders can only sample textures and read uniform buffers that its capability token explicitly allows.
+No Global Z-Index: Depth is strictly hierarchical. A child component can only occlude its parent or siblings within its allocated Z-depth slice. There are no "pop-ups" that break the spatial hierarchy unless explicitly granted a "Modal" capability by tpt-telos.
+Network & Filesystem Isolation: tpt-chora has zero network or filesystem capabilities. All data fetching is handled by tpt-archon's capability-based I/O subsystem. tpt-chora only renders the results.
+5. Performance & Memory Model
+tpt-chora is designed to guarantee 120fps (or 90fps in XR) with zero frame drops.
+Zero Allocation in Render Loop: The entire render loop (from input processing to GPU command buffer submission) allocates zero bytes on the heap. All memory is pre-allocated in tpt-archon's page cache or GPU VRAM.
+Double/Triple Buffering: State mutations in tpt-archon are written to a back-buffer. The GPU reads from the front-buffer. A lock-free atomic swap occurs at the vertical blank (VBlank), eliminating tearing and stutter.
+Incremental Re-rendering: If only a single button's color changes, tpt-eidos emits a "dirty rect" (a small bounding box). tpt-chora only re-rasterizes and re-submits GPU commands for that specific region, leaving the rest of the frame untouched.
+6. The Developer Experience (DX)
+While the engine is built in Rust, the developer writes UI in tpt-eidos. tpt-chora provides the tooling to make this seamless.
+The Chora Inspector: A built-in, overlay debugging tool (toggled via a keyboard shortcut or XR gesture). It allows developers to:
+View the live Semantic (A11y) Tree.
+Inspect the exact GPU draw calls and shader execution times.
+Visualize the "dirty rects" and overdraw heatmaps.
+Toggle forced color-blindness modes or high-contrast proofs to verify tpt-eidos accessibility constraints.
+Hot Reloading: Because the UI is a pure function of tpt-archon state and tpt-eidos layout, changing an eidos file instantly recompiles the IR and updates the GPU pipelines without losing application state.
+7. Conclusion
+tpt-chora is not a compromise. It is the realization of a post-document web.
+By unifying typography, 3D spatial rendering, hardware media, multi-modal input, and accessibility into a single, zero-copy, GPU-driven runtime, tpt-chora eliminates the technical debt of the last 30 years of web development. It provides the safety of tpt-eidos, the logic of tpt-telos, and the memory integrity of tpt-archon, delivering a universal, high-performance canvas for the next generation of computing.
+
+
+
+
+
+1. Handling PCs with "No GPU" (or Low-End Hardware)
+In 2026, almost every consumer device has some integrated GPU. However, we must account for headless servers, extremely old hardware, restricted embedded environments (like IoT), and low-power laptops.
+tpt-chora handles this via a Three-Tier Fallback Strategy:
+Tier 1: Software Rasterization (The CPU Fallback)
+Because tpt-chora uses wgpu as its hardware abstraction layer, it automatically inherits wgpu's software fallbacks. If no hardware Vulkan, Metal, or DX12 adapter is found, tpt-chora seamlessly falls back to lavapipe (LLVMpipe) or DXC (DirectX Compute) software rasterization.
+The Trade-off: It uses the CPU instead of the GPU. It will be slower, but the application will not crash. It guarantees that the UI remains functional on a 10-year-old office PC or a headless Raspberry Pi.
+Tier 2: Headless / Server-Side Rendering
+If tpt-chora is running on a cloud server (e.g., for automated UI testing, generating PDF reports, or streaming a UI to a thin client via WebRTC), it operates in Headless Mode.
+It initializes a "null" windowing context (no physical display).
+It renders directly into an off-screen memory framebuffer.
+It outputs raw pixel data (PNG/JPEG/Video frames) over the network, consuming zero display resources.
+Tier 3: Dynamic Fidelity (The tpt-eidos Performance Profiles)
+If a weak GPU is detected, tpt-chora queries the hardware capabilities and instructs tpt-eidos to switch to a "Low Power" layout profile.
+Shadows & Post-Processing: Disabled.
+Typography: Drops from GPU-accelerated Signed Distance Field (SDF) fonts to standard, pre-rasterized bitmap font atlases.
+Framerate: Caps at 30fps or 60fps to save battery.
+Because tpt-eidos is a proof-native language, it can mathematically prove that the "Low Power" layout still satisfies all accessibility and structural constraints, just with fewer visual flourishes.
+2. How to Make it Easy to Migrate Over
+You cannot ask the world to throw away React, CSS, and HTML and rewrite everything in tpt-eidos and tpt-telos. Migration must be incremental, painless, and interoperable.
+The "Trojan Horse" Strategy (Embeddable Canvas)
+Do not launch tpt-chora as a standalone "TPT Browser." Launch it as an embeddable runtime.
+We provide a Web Component: <tpt-chora>.
+A developer can keep their existing React/Vue/HTML app, but replace just one highly complex, janky component (e.g., a massive data grid, a 3D product configurator, or a real-time video editor) with <tpt-chora>.
+This proves the value of the stack immediately without requiring a total rewrite.
+The "Rosetta Stone" (Legacy Web Transpiler)
+To ease the transition, tpt-chora includes a compatibility layer that can parse standard HTML and CSS into the Chora-IR.
+Developers can write standard CSS, and the tpt-eidos compiler will translate it into verified layout constraints.
+If the CSS violates a safety proof (e.g., text overflow), the compiler throws a warning and auto-corrects it. This allows teams to migrate their existing stylesheets gradually, turning legacy CSS into verified tpt-eidos code over time.
+FFI and WebAssembly Interop
+Companies have millions of lines of existing business logic in JavaScript, Python, or Java.
+tpt-telos natively supports WebAssembly (Wasm) and Foreign Function Interfaces (FFI).
+A company can keep their existing backend logic compiled to Wasm, and tpt-telos will safely bridge the state between the Wasm module and the tpt-archon zero-copy memory. You don't have to rewrite your business logic to use the new UI.
+3. Can it Run on Today's Infrastructure?
+Yes. This is the most critical point: tpt-chora does not require a new internet. It is designed to be deployed using the exact same infrastructure that hosts today's web.
+A. Deployment: Standard CDNs and Wasm
+The compiled output of tpt-eidos and tpt-telos is not a proprietary binary. It compiles down to:
+WebAssembly (Wasm) modules for the logic and layout solver.
+WGSL (WebGPU Shading Language) or SPIR-V for the GPU shaders.
+Binary assets (textures, SDF font atlases, 3D meshes).
+These are standard file types. You host them on Cloudflare, AWS S3, Vercel, or Fastly exactly as you would host a React bundle. The browser or native app simply fetches them via standard HTTP/3.
+B. The "WebGPU Bootstrap" (Running inside Chrome/Safari)
+How does the user actually open it if we aren't building a custom browser? We use the existing browsers as dumb bootloaders.
+By 2026, WebGPU is fully supported in Chrome, Edge, Safari, and Firefox.
+We build a tiny, 500kb "TPT Bootstrap" script.
+When a user visits a URL, the browser loads this tiny script.
+The script initializes a <canvas> element, fetches the tpt-chora Wasm and WebGPU shaders from the CDN, and boots the tpt-chora runtime inside the canvas.
+The Result: The user is technically in Chrome, but the DOM is completely bypassed. The browser is only acting as a network fetcher and a WebGPU context provider. The actual rendering, state, and layout are handled 100% by tpt-chora at native speeds.
+C. Backend Infrastructure: Agnostic by Design
+tpt-archon (the substrate) does not demand a proprietary database.
+It includes native adapters for PostgreSQL, Redis, S3, and SQLite.
+It speaks standard protocols: HTTP/3, gRPC, and WebSockets.
+If a company uses tpt-chora for the frontend, they can keep their existing Node.js/Go/Rust backends and Postgres databases. tpt-archon simply acts as a highly optimized, zero-copy caching and state layer between the tpt-chora frontend and their legacy backend.
+Summary: The Pragmatic Revolution
+By designing tpt-chora with these constraints, we transform it from a fragile academic exercise into an unstoppable industry standard:
+If you have no GPU: It falls back to CPU software rendering or headless mode. It never crashes.
+If you want to migrate: You don't rewrite your app. You drop a <tpt-chora> web component into your existing React app, or use the CSS transpiler to gradually verify your existing styles.
+If you want to deploy: You push Wasm and WebGPU shaders to Cloudflare. It runs inside the user's existing Chrome/Safari browser via WebGPU, bypassing the DOM without requiring them to install a new "TPT Browser."

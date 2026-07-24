@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/tpt-chora-render",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+rust-version = "1.74"
+authors = ["TPT Solutions"]
+repository = "https://github.com/tpt-solutions/tpt-chora"
+homepage = "https://github.com/tpt-solutions/tpt-chora"
+readme = "README.md"
+keywords = ["gpu", "rendering", "wgpu", "proof-native", "ui"]
+categories = ["graphics", "rendering", "gui", "game-engines"]
+
+[workspace.dependencies]
+tpt-chora-render = { path = "crates/tpt-chora-render", version = "0.1.0" }
+
+[profile.release]
+opt-level = 3
+lto = true
