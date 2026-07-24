@@ -13,6 +13,7 @@ pub mod error;
 pub mod graph;
 pub mod postprocess;
 pub mod renderer;
+pub mod security;
 pub mod vector;
 
 pub use error::RenderError;

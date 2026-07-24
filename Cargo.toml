@@ -2,6 +2,16 @@
 resolver = "2"
 members = [
     "crates/tpt-chora-render",
+    "crates/tpt-chora-text",
+    "crates/tpt-chora-spatial",
+    "crates/tpt-chora-input",
+    "crates/tpt-chora-a11y",
+    "crates/tpt-chora-media",
+    "crates/tpt-chora-runtime",
+    "crates/tpt-chora-inspector",
+    "crates/tpt-chora-fallback",
+    "crates/tpt-chora-compat",
+    "crates/tpt-chora-all-subsystems",
 ]
 
 [workspace.package]
@@ -18,6 +28,16 @@ categories = ["graphics", "rendering", "gui", "game-engines"]
 
 [workspace.dependencies]
 tpt-chora-render = { path = "crates/tpt-chora-render", version = "0.1.0" }
+tpt-chora-text = { path = "crates/tpt-chora-text", version = "0.1.0" }
+tpt-chora-spatial = { path = "crates/tpt-chora-spatial", version = "0.1.0" }
+tpt-chora-input = { path = "crates/tpt-chora-input", version = "0.1.0" }
+tpt-chora-a11y = { path = "crates/tpt-chora-a11y", version = "0.1.0" }
+tpt-chora-media = { path = "crates/tpt-chora-media", version = "0.1.0" }
+tpt-chora-runtime = { path = "crates/tpt-chora-runtime", version = "0.1.0" }
+tpt-chora-inspector = { path = "crates/tpt-chora-inspector", version = "0.1.0" }
+tpt-chora-fallback = { path = "crates/tpt-chora-fallback", version = "0.1.0" }
+tpt-chora-compat = { path = "crates/tpt-chora-compat", version = "0.1.0" }
+tpt-chora-all-subsystems = { path = "crates/tpt-chora-all-subsystems", version = "0.1.0" }
 
 [profile.release]
 opt-level = 3

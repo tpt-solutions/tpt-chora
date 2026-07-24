@@ -36,7 +36,11 @@ pub struct PostProcessPipeline {
 }
 
 impl PostProcessPipeline {
-    pub fn new(device: &wgpu::Device, target_format: wgpu::TextureFormat, params: ColorGradeParams) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        target_format: wgpu::TextureFormat,
+        params: ColorGradeParams,
+    ) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("chora-postprocess-shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/postprocess.wgsl").into()),

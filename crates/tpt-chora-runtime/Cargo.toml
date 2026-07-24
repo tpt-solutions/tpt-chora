@@ -1,6 +1,6 @@
 [package]
-name = "tpt-chora-render"
-description = "tpt-chora Core Rendering Engine (The Canvas): wgpu render graph, GPU vector tessellation, post-processing"
+name = "tpt-chora-runtime"
+description = "tpt-chora Integration Contracts (The TPT Trinity): eidos/archon/telos integration, zero-copy GPU binding"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,11 +13,8 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
+tpt-chora-render = { workspace = true }
 wgpu = "0.19"
 bytemuck = { version = "1.14", features = ["derive"] }
-pollster = "0.3"
 thiserror = "1.0"
-bitflags = "2.4"
-
-[dev-dependencies]
-png = "0.17"
+glam = "0.25"

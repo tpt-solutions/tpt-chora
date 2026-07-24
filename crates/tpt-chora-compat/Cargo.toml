@@ -1,6 +1,6 @@
 [package]
-name = "tpt-chora-render"
-description = "tpt-chora Core Rendering Engine (The Canvas): wgpu render graph, GPU vector tessellation, post-processing"
+name = "tpt-chora-compat"
+description = "tpt-chora Migration & Adoption: HTML/CSS transpiler, Wasm/FFI interop, embeddable web component"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,11 +13,4 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-wgpu = "0.19"
-bytemuck = { version = "1.14", features = ["derive"] }
-pollster = "0.3"
 thiserror = "1.0"
-bitflags = "2.4"
-
-[dev-dependencies]
-png = "0.17"

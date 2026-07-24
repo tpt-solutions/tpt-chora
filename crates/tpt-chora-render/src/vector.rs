@@ -36,7 +36,7 @@ struct TessellateParams {
 /// given radius centered at `center`, using the standard k ~= 0.5522847498
 /// control-point offset.
 pub fn circle_path(center: [f32; 2], radius: f32) -> Vec<CubicBezier> {
-    const K: f32 = 0.552_284_75;
+    const K: f32 = 0.552_284_8;
     let (cx, cy) = (center[0], center[1]);
     let r = radius;
     let rk = radius * K;

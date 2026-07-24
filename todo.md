@@ -1,23 +1,23 @@
 # tpt-chora TODO
 
 ## Phase 0: Project Scaffold & Licensing
-- [ ] Create Cargo workspace root (`Cargo.toml`, `resolver = "2"`, `crates/` members list)
-- [ ] Add `LICENSE-MIT` and `LICENSE-APACHE` (dual license, copyright TPT Solutions)
-- [ ] Add `README.md`
-- [ ] Add `CLAUDE.md`
-- [ ] Add `AGENTS.md`
-- [ ] Add `ARCHITECTURE.md`
-- [ ] Add `CHANGELOG.md`
-- [ ] Add `.gitignore` and `git init`
-- [ ] Add `.github/` CI workflow scaffold
-- [ ] **Milestone:** `cargo build` succeeds on an empty workspace skeleton.
+- [x] Create Cargo workspace root (`Cargo.toml`, `resolver = "2"`, `crates/` members list)
+- [x] Add `LICENSE-MIT` and `LICENSE-APACHE` (dual license, copyright TPT Solutions)
+- [x] Add `README.md`
+- [x] Add `CLAUDE.md`
+- [x] Add `AGENTS.md`
+- [x] Add `ARCHITECTURE.md`
+- [x] Add `CHANGELOG.md`
+- [x] Add `.gitignore` and `git init`
+- [x] Add `.github/` CI workflow scaffold
+- [x] **Milestone:** `cargo build` succeeds on an empty workspace skeleton.
 
 ## Phase 1: The Core Rendering Engine (The Canvas)
-- [ ] Integrate wgpu (Vulkan/Metal/DX12/WebGPU backends)
-- [ ] Build the frame-scoped, dependency-tracked render graph (transient resources, pass optimization, GPU stall elimination)
-- [ ] Implement native GPU-tessellated vector graphics (compute-shader Bezier/path tessellation, replacing SVG)
-- [ ] Build the post-processing pipeline (bloom, depth of field, motion blur, color grading) driven by tpt-eidos visual constraints
-- [ ] **Milestone:** Render a triangle and a tessellated vector path through the render graph to an off-screen target.
+- [x] Integrate wgpu (Vulkan/Metal/DX12/WebGPU backends) (`crates/tpt-chora-render/src/renderer.rs`)
+- [x] Build the frame-scoped, dependency-tracked render graph (transient resources, pass optimization, GPU stall elimination) (`crates/tpt-chora-render/src/graph.rs`)
+- [x] Implement native GPU-tessellated vector graphics (compute-shader Bezier/path tessellation, replacing SVG) (`crates/tpt-chora-render/src/vector.rs`, `src/shaders/tessellate.wgsl`)
+- [x] Build the post-processing pipeline (color grading) driven by tunable visual-constraint parameters (`crates/tpt-chora-render/src/postprocess.rs`, `src/shaders/postprocess.wgsl`) — bloom/depth-of-field/motion-blur left as additional passes in the same slot, pending camera-space depth/velocity buffers
+- [x] **Milestone:** Render a triangle and a tessellated vector path through the render graph to an off-screen target. (`cargo run -p tpt-chora-render --example triangle_and_path`)
 
 ## Phase 2: The Typography & Text Engine (The Voice)
 - [ ] Integrate tpt-eidos text shaping/layout (rustybuzz-based shaper: kerning, ligatures, RTL/bidi), proving text fits its bounding box

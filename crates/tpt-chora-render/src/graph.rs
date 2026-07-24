@@ -138,9 +138,8 @@ impl RenderGraph {
             }
         }
 
-        let mut queue: std::collections::VecDeque<usize> = (0..n)
-            .filter(|&i| in_degree[i] == 0)
-            .collect();
+        let mut queue: std::collections::VecDeque<usize> =
+            (0..n).filter(|&i| in_degree[i] == 0).collect();
         let mut order = Vec::with_capacity(n);
         let mut visited = HashSet::new();
 
@@ -165,7 +164,11 @@ impl RenderGraph {
 
     /// Allocates every declared transient resource, then runs each node's
     /// pass in dependency order, all inside one command encoder/submission.
-    pub fn execute(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<(), RenderError> {
+    pub fn execute(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<(), RenderError> {
         let order = self.topo_order()?;
 
         let mut resources: HashMap<ResourceId, TransientTexture> = HashMap::new();

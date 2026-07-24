@@ -1,6 +1,6 @@
 [package]
-name = "tpt-chora-render"
-description = "tpt-chora Core Rendering Engine (The Canvas): wgpu render graph, GPU vector tessellation, post-processing"
+name = "tpt-chora-spatial"
+description = "tpt-chora Spatial & 3D Engine (The Depth): stereoscopic rendering, foveated rendering, volumetric lighting"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -17,7 +17,8 @@ wgpu = "0.19"
 bytemuck = { version = "1.14", features = ["derive"] }
 pollster = "0.3"
 thiserror = "1.0"
-bitflags = "2.4"
+glam = "0.25"
+rodio = { version = "0.18", default-features = false, features = ["wav"] }
 
 [dev-dependencies]
 png = "0.17"

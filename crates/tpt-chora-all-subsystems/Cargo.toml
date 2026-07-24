@@ -1,0 +1,25 @@
+[package]
+name = "tpt-chora-all-subsystems"
+description = "Phase 14 milestone: full end-to-end demo exercising every tpt-chora subsystem"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "all_subsystems_demo"
+path = "all_subsystems.rs"
+
+[dependencies]
+tpt-chora-render = { workspace = true }
+tpt-chora-text = { path = "../tpt-chora-text" }
+tpt-chora-spatial = { path = "../tpt-chora-spatial" }
+tpt-chora-input = { path = "../tpt-chora-input" }
+tpt-chora-a11y = { path = "../tpt-chora-a11y" }
+tpt-chora-media = { path = "../tpt-chora-media" }
+tpt-chora-runtime = { path = "../tpt-chora-runtime" }
+tpt-chora-inspector = { path = "../tpt-chora-inspector" }
+tpt-chora-fallback = { path = "../tpt-chora-fallback" }
+tpt-chora-compat = { path = "../tpt-chora-compat" }
+wgpu = "0.19"
+bytemuck = { version = "1.14", features = ["derive"] }
+glam = "0.25"
