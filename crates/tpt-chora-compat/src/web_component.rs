@@ -7,28 +7,81 @@ pub struct WebComponentConfig {
 
 pub struct ComponentBridge {
     config: WebComponentConfig,
-    initialized: bool,
+    buffer: Vec<u8>,
+    event_log: Vec<(String, Vec<u8>)>,
+    width: u32,
+    height: u32,
 }
 
 impl ComponentBridge {
     pub fn new(config: WebComponentConfig) -> Self {
         Self {
             config,
-            initialized: false,
+            buffer: Vec::new(),
+            event_log: Vec::new(),
+            width: 0,
+            height: 0,
         }
     }
 
     pub fn initialize(&mut self) {
-        self.initialized = true;
+        self.width = 300;
+        self.height = 150;
+        self.buffer = vec![0u8; (self.width * self.height * 4) as usize];
     }
 
     pub fn render(&self, width: u32, height: u32) -> Vec<u8> {
-        vec![0u8; (width * height * 4) as usize]
+        let mut pixels = vec![0u8; (width * height * 4) as usize];
+
+        let name_hash = self
+            .config
+            .name
+            .bytes()
+            .fold(0u8, |acc, b| acc.wrapping_add(b));
+
+        for y in 0..height {
+            for x in 0..width {
+                let idx = ((y * width + x) * 4) as usize;
+                let is_border = x == 0 || x == width - 1 || y == 0 || y == height - 1;
+
+                if is_border {
+                    pixels[idx] = name_hash;
+                    pixels[idx + 1] = name_hash.wrapping_add(80);
+                    pixels[idx + 2] = name_hash.wrapping_add(160);
+                    pixels[idx + 3] = 255;
+                } else {
+                    pixels[idx] = 240;
+                    pixels[idx + 1] = 240;
+                    pixels[idx + 2] = 240;
+                    pixels[idx + 3] = 255;
+                }
+
+                let header_height = 28.min(height);
+                if y < header_height && x > 0 && x < width - 1 {
+                    pixels[idx] = name_hash;
+                    pixels[idx + 1] = name_hash.wrapping_add(50);
+                    pixels[idx + 2] = name_hash.wrapping_add(100);
+                    pixels[idx + 3] = 255;
+                }
+            }
+        }
+
+        pixels
     }
 
-    pub fn handle_event(&self, _event_type: &str, _data: &[u8]) {}
+    pub fn handle_event(&mut self, event_type: &str, data: &[u8]) {
+        self.event_log.push((event_type.to_string(), data.to_vec()));
+    }
+
+    pub fn event_log(&self) -> &[(String, Vec<u8>)] {
+        &self.event_log
+    }
 
     pub fn config(&self) -> &WebComponentConfig {
         &self.config
+    }
+
+    pub fn buffer(&self) -> &[u8] {
+        &self.buffer
     }
 }

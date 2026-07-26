@@ -37,7 +37,9 @@ pub fn shaped_text(
 
     match direction {
         TextDirection::Ltr => buffer.set_direction(rustybuzz::Direction::LeftToRight),
-        TextDirection::Rtl | TextDirection::Bidi => buffer.set_direction(rustybuzz::Direction::RightToLeft),
+        TextDirection::Rtl | TextDirection::Bidi => {
+            buffer.set_direction(rustybuzz::Direction::RightToLeft)
+        }
     }
 
     let shaped = rustybuzz::shape(&face, &[], buffer);

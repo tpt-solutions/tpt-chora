@@ -52,6 +52,22 @@ impl IntentResolver {
         }
     }
 
+    pub fn long_press_threshold_ms(&self) -> u64 {
+        self.long_press_threshold_ms
+    }
+
+    pub fn set_long_press_threshold(&mut self, ms: u64) {
+        self.long_press_threshold_ms = ms;
+    }
+
+    pub fn check_long_press(&self, current_time: u64, touch_x: f32, touch_y: f32) -> bool {
+        let elapsed = current_time.saturating_sub(self.touch_start_time);
+        let dist = ((touch_x - self.touch_start_x).powi(2)
+            + (touch_y - self.touch_start_y).powi(2))
+        .sqrt();
+        elapsed >= self.long_press_threshold_ms && dist < self.drag_threshold
+    }
+
     pub fn resolve(
         &mut self,
         gesture: GestureIntent,
@@ -96,8 +112,17 @@ impl IntentResolver {
                     InteractionIntent::Hover
                 }
             }
-            GestureIntent::PinchZoom => InteractionIntent::PinchZoomStart,
-            GestureIntent::Pan => InteractionIntent::PanStart,
+            GestureIntent::PinchZoom => {
+                self.touch_start_x = x;
+                self.touch_start_y = y;
+                InteractionIntent::PinchZoomStart
+            }
+            GestureIntent::Pan => {
+                self.touch_start_x = x;
+                self.touch_start_y = y;
+                self.touching_start_time_set(timestamp);
+                InteractionIntent::PanStart
+            }
             GestureIntent::DoubleClick => InteractionIntent::DoubleClick,
             GestureIntent::Swipe { direction } => match direction {
                 crate::devices::SwipeDirection::Up => InteractionIntent::SwipeUp,
@@ -108,8 +133,20 @@ impl IntentResolver {
         }
     }
 
+    fn touching_start_time_set(&mut self, timestamp: u64) {
+        self.touch_start_time = timestamp;
+    }
+
     pub fn end_drag(&mut self) -> InteractionIntent {
         self.dragging = false;
         InteractionIntent::DragEnd
+    }
+
+    pub fn end_pinch(&mut self) -> InteractionIntent {
+        InteractionIntent::PinchZoomEnd
+    }
+
+    pub fn end_pan(&mut self) -> InteractionIntent {
+        InteractionIntent::PanEnd
     }
 }

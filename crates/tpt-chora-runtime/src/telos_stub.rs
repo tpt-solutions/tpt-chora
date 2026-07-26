@@ -6,6 +6,7 @@ pub struct TelosEvent {
     pub target_id: u64,
     pub event_type: EventType,
     pub timestamp: u64,
+    pub payload: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,10 +54,18 @@ impl TelosState {
             return None;
         }
 
-        match event.event_type {
+        let mutation = match event.event_type {
             EventType::Click => Some(StateMutation {
                 page_id: event.target_id,
                 field_updates: vec![(0, vec![1u8])],
+            }),
+            EventType::DoubleClick => Some(StateMutation {
+                page_id: event.target_id,
+                field_updates: vec![(0, vec![2u8])],
+            }),
+            EventType::LongPress => Some(StateMutation {
+                page_id: event.target_id,
+                field_updates: vec![(0, vec![3u8])],
             }),
             EventType::Focus => Some(StateMutation {
                 page_id: event.target_id,
@@ -66,8 +75,53 @@ impl TelosState {
                 page_id: event.target_id,
                 field_updates: vec![(1, vec![0u8])],
             }),
-            _ => None,
+            EventType::KeyDown => {
+                let key_byte = event.payload.first().copied().unwrap_or(0);
+                Some(StateMutation {
+                    page_id: event.target_id,
+                    field_updates: vec![(2, vec![key_byte])],
+                })
+            }
+            EventType::KeyUp => Some(StateMutation {
+                page_id: event.target_id,
+                field_updates: vec![(2, vec![0u8])],
+            }),
+            EventType::TouchBegin => {
+                let touch_id = event.payload.first().copied().unwrap_or(0);
+                Some(StateMutation {
+                    page_id: event.target_id,
+                    field_updates: vec![(3, vec![touch_id])],
+                })
+            }
+            EventType::TouchEnd => Some(StateMutation {
+                page_id: event.target_id,
+                field_updates: vec![(3, vec![0u8])],
+            }),
+            EventType::ValueChange => {
+                let value_bytes = event.payload.clone();
+                Some(StateMutation {
+                    page_id: event.target_id,
+                    field_updates: vec![(4, value_bytes)],
+                })
+            }
+        };
+
+        if let Some(ref m) = mutation {
+            self.transitions.push(StateTransition {
+                page_id: m.page_id,
+                field_updates: m.field_updates.clone(),
+            });
         }
+
+        mutation
+    }
+
+    pub fn transitions(&self) -> &[StateTransition] {
+        &self.transitions
+    }
+
+    pub fn transition_count(&self) -> usize {
+        self.transitions.len()
     }
 }
 

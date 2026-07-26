@@ -59,7 +59,24 @@ impl HeadlessRenderer {
     }
 
     fn encode_jpeg(&self, pixels: &[u8]) -> Result<Vec<u8>, crate::FallbackError> {
-        Ok(pixels.to_vec())
+        let rgb: Vec<u8> = pixels
+            .chunks_exact(4)
+            .flat_map(|rgba| [rgba[0], rgba[1], rgba[2]])
+            .collect();
+
+        let mut buf = std::io::Cursor::new(Vec::new());
+        let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 85);
+        use image::ImageEncoder;
+        encoder
+            .write_image(
+                &rgb,
+                self.config.width,
+                self.config.height,
+                image::ColorType::Rgb8.into(),
+            )
+            .map_err(|e| crate::FallbackError::EncodeFailed(e.to_string()))?;
+
+        Ok(buf.into_inner())
     }
 
     pub fn render_frame_to_file(&self, path: &std::path::Path) -> Result<(), crate::FallbackError> {

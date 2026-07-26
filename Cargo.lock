@@ -1484,6 +1484,7 @@ dependencies = [
  "bytemuck",
  "glam",
  "thiserror",
+ "wgpu",
 ]
 
 [[package]]

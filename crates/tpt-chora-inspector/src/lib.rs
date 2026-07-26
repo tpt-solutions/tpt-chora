@@ -12,4 +12,4 @@ pub use error::InspectorError;
 pub use gpu_timing::{GpuTimer, TimingResult};
 pub use heatmap::{HeatmapCell, OverdrawHeatmap};
 pub use hot_reload::{HotReloader, ReloadEvent};
-pub use inspector::{ChoraInspector, InspectorConfig};
+pub use inspector::{ChoraInspector, InspectorConfig, InspectorFrameData};

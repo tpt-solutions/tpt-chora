@@ -85,10 +85,12 @@ impl SdfAtlasBuilder {
                 continue;
             }
 
-            let glyph = glyph_id_ab.with_scale_and_position(PxScale::from(self.font_size), ab_glyph::point(0.0, 0.0));
+            let glyph = glyph_id_ab
+                .with_scale_and_position(PxScale::from(self.font_size), ab_glyph::point(0.0, 0.0));
 
             let outline = font.outline_glyph(glyph);
-            let (pixel_width, pixel_height, rasterized_bitmap) = if let Some(ref outline) = outline {
+            let (pixel_width, pixel_height, rasterized_bitmap) = if let Some(ref outline) = outline
+            {
                 let bounds = outline.px_bounds();
                 let w = (bounds.width().ceil() as u32).max(1);
                 let h = (bounds.height().ceil() as u32).max(1);
@@ -120,7 +122,8 @@ impl SdfAtlasBuilder {
                 continue;
             }
 
-            let sdf_data = compute_sdf(&rasterized_bitmap, pixel_width, pixel_height, spread as i32);
+            let sdf_data =
+                compute_sdf(&rasterized_bitmap, pixel_width, pixel_height, spread as i32);
 
             for sy in 0..pixel_height {
                 for sx in 0..pixel_width {

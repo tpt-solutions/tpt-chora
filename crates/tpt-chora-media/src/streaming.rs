@@ -16,6 +16,18 @@ pub enum AssetPriority {
     Background = 4,
 }
 
+impl AssetPriority {
+    pub fn promoted(self) -> Self {
+        match self {
+            AssetPriority::Background => AssetPriority::Low,
+            AssetPriority::Low => AssetPriority::Normal,
+            AssetPriority::Normal => AssetPriority::High,
+            AssetPriority::High => AssetPriority::Critical,
+            AssetPriority::Critical => AssetPriority::Critical,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct StreamRequest {
     pub url: String,
@@ -114,5 +126,35 @@ impl AssetStreamer {
         self.in_flight
     }
 
-    pub fn prioritize_viewport(&mut self, viewport_bounds: [f32; 4]) {}
+    pub fn prioritize_viewport(&mut self, viewport_bounds: [f32; 4]) {
+        let mut promoted = Vec::new();
+        let mut remaining = BinaryHeap::new();
+
+        while let Some(req) = self.requests.pop() {
+            if let Some(bbox) = &req.request.bounding_box {
+                let overlaps = viewport_bounds[0] < bbox[2]
+                    && viewport_bounds[2] > bbox[0]
+                    && viewport_bounds[1] < bbox[3]
+                    && viewport_bounds[3] > bbox[1];
+
+                if overlaps && req.request.priority as u32 > AssetPriority::Critical as u32 {
+                    let mut new_req = req.request;
+                    new_req.priority = new_req.priority.promoted();
+                    promoted.push(PrioritizedRequest {
+                        request: new_req,
+                        sequence: req.sequence,
+                    });
+                } else {
+                    remaining.push(req);
+                }
+            } else {
+                remaining.push(req);
+            }
+        }
+
+        for req in promoted {
+            self.requests.push(req);
+        }
+        self.requests = remaining;
+    }
 }

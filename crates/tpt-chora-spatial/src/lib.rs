@@ -5,7 +5,7 @@ pub mod stereoscopic;
 pub mod volumetric;
 
 pub use error::SpatialError;
-pub use foveated::{FoveatedRenderer, GazeTarget};
-pub use spatial_audio::{AudioSource, SpatialAudioEngine};
-pub use stereoscopic::{StereoEye, StereoView, StereoscopicRenderer};
+pub use foveated::{FoveatedRenderer, FoveationLevel, GazeTarget};
+pub use spatial_audio::{AudioSource, HrtfParams, SpatialAudioEngine, SpatialAudioOutput};
+pub use stereoscopic::{StereoEye, StereoGeometry, StereoView, StereoscopicRenderer};
 pub use volumetric::{VolumetricLightPipeline, VolumetricParams};

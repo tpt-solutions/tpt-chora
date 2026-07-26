@@ -1,3 +1,32 @@
+#[derive(Debug, Clone)]
+pub struct FidelitySettings {
+    pub shadows_enabled: bool,
+    pub post_processing_enabled: bool,
+    pub sdf_fonts: bool,
+    pub max_fps: u32,
+    pub shadow_map_size: u32,
+    pub max_texture_size: u32,
+    pub msaa_samples: u32,
+    pub volumetric_lighting: bool,
+    pub foveated_rendering: bool,
+}
+
+impl From<&FidelityProfile> for FidelitySettings {
+    fn from(profile: &FidelityProfile) -> Self {
+        Self {
+            shadows_enabled: profile.shadows_enabled,
+            post_processing_enabled: profile.post_processing_enabled,
+            sdf_fonts: profile.sdf_fonts,
+            max_fps: profile.max_fps,
+            shadow_map_size: profile.shadow_map_size,
+            max_texture_size: profile.max_texture_size,
+            msaa_samples: profile.msaa_samples,
+            volumetric_lighting: profile.volumetric_lighting,
+            foveated_rendering: profile.foveated_rendering,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FidelityLevel {
     Ultra = 0,
@@ -109,6 +138,14 @@ impl DynamicFidelity {
             .iter()
             .find(|p| p.level == self.current_level)
             .unwrap_or(&self.profiles[1])
+    }
+
+    pub fn current_settings(&self) -> FidelitySettings {
+        FidelitySettings::from(self.current_profile())
+    }
+
+    pub fn apply_to_config(&self) -> FidelitySettings {
+        self.current_settings()
     }
 
     pub fn update(&mut self, frame_time_ms: f64) {

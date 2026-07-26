@@ -3,7 +3,7 @@ pub struct WebGpuBootstrap {
     canvas_height: u32,
     wasm_url: String,
     shader_urls: Vec<String>,
-    initialized: bool,
+    _initialized: bool,
 }
 
 impl WebGpuBootstrap {
@@ -13,7 +13,7 @@ impl WebGpuBootstrap {
             canvas_height,
             wasm_url: String::new(),
             shader_urls: Vec::new(),
-            initialized: false,
+            _initialized: false,
         }
     }
 

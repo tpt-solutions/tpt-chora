@@ -1,9 +1,8 @@
 use crate::devices::DeviceEvent;
 
 pub struct HapticRouter {
-    patterns: Vec<HapticPattern>,
-    active_pattern: Option<usize>,
     platform: PlatformHaptics,
+    last_events: Vec<HapticEvent>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,7 +32,10 @@ pub struct HapticFeedback {
 enum PlatformHaptics {
     CoreHaptics,
     AndroidVibrator,
-    XrControllerRumble { controller_id: u32 },
+    #[allow(dead_code)]
+    XrControllerRumble {
+        controller_id: u32,
+    },
     Unsupported,
 }
 
@@ -41,9 +43,8 @@ impl HapticRouter {
     pub fn new() -> Self {
         let platform = Self::detect_platform();
         Self {
-            patterns: Vec::new(),
-            active_pattern: None,
             platform,
+            last_events: Vec::new(),
         }
     }
 
@@ -70,11 +71,18 @@ impl HapticRouter {
                 }
             }
             DeviceEvent::PinchStart { .. } => Some(HapticPattern::Selection),
+            DeviceEvent::GamepadButton { pressed: true, .. } => Some(HapticPattern::Medium),
+            DeviceEvent::GamepadAxis { value, .. } if value.abs() > 0.8 => {
+                Some(HapticPattern::Light)
+            }
             _ => None,
         }
     }
 
-    pub fn play(&self, pattern: &HapticPattern) -> Result<(), crate::InputError> {
+    pub fn play(&mut self, pattern: &HapticPattern) -> Result<(), crate::InputError> {
+        let events = Self::translate_pattern(pattern);
+        self.last_events = events;
+
         match &self.platform {
             PlatformHaptics::CoreHaptics => self.play_corehaptics(pattern),
             PlatformHaptics::AndroidVibrator => self.play_android(pattern),
@@ -83,15 +91,121 @@ impl HapticRouter {
         }
     }
 
+    pub fn translate_pattern(pattern: &HapticPattern) -> Vec<HapticEvent> {
+        match pattern {
+            HapticPattern::Light => vec![HapticEvent {
+                intensity: 0.3,
+                duration_ms: 10,
+                delay_ms: 0,
+            }],
+            HapticPattern::Medium => vec![HapticEvent {
+                intensity: 0.6,
+                duration_ms: 20,
+                delay_ms: 0,
+            }],
+            HapticPattern::Heavy => vec![HapticEvent {
+                intensity: 1.0,
+                duration_ms: 40,
+                delay_ms: 0,
+            }],
+            HapticPattern::Selection => vec![HapticEvent {
+                intensity: 0.2,
+                duration_ms: 5,
+                delay_ms: 0,
+            }],
+            HapticPattern::Success => vec![
+                HapticEvent {
+                    intensity: 0.5,
+                    duration_ms: 15,
+                    delay_ms: 0,
+                },
+                HapticEvent {
+                    intensity: 0.0,
+                    duration_ms: 10,
+                    delay_ms: 15,
+                },
+                HapticEvent {
+                    intensity: 0.8,
+                    duration_ms: 25,
+                    delay_ms: 25,
+                },
+            ],
+            HapticPattern::Warning => vec![
+                HapticEvent {
+                    intensity: 0.7,
+                    duration_ms: 20,
+                    delay_ms: 0,
+                },
+                HapticEvent {
+                    intensity: 0.0,
+                    duration_ms: 15,
+                    delay_ms: 20,
+                },
+                HapticEvent {
+                    intensity: 0.7,
+                    duration_ms: 20,
+                    delay_ms: 35,
+                },
+            ],
+            HapticPattern::Error => vec![
+                HapticEvent {
+                    intensity: 1.0,
+                    duration_ms: 30,
+                    delay_ms: 0,
+                },
+                HapticEvent {
+                    intensity: 0.0,
+                    duration_ms: 10,
+                    delay_ms: 30,
+                },
+                HapticEvent {
+                    intensity: 1.0,
+                    duration_ms: 30,
+                    delay_ms: 40,
+                },
+                HapticEvent {
+                    intensity: 0.0,
+                    duration_ms: 10,
+                    delay_ms: 70,
+                },
+                HapticEvent {
+                    intensity: 1.0,
+                    duration_ms: 50,
+                    delay_ms: 80,
+                },
+            ],
+            HapticPattern::Custom { pattern } => pattern.clone(),
+        }
+    }
+
     fn play_corehaptics(&self, _pattern: &HapticPattern) -> Result<(), crate::InputError> {
+        // CoreHaptics framework integration point:
+        // On macOS/iOS, this would create CHHapticEngine, CHHapticPattern with
+        // CHHapticEventParameter(.hapticIntensity, event.intensity) and
+        // CHHapticEventParameter(.hapticSharpness, 0.0),
+        // timed at event.delay_ms with duration event.duration_ms.
+        // The engine.start(completionHandler:) then plays the pattern.
         Ok(())
     }
 
     fn play_android(&self, _pattern: &HapticPattern) -> Result<(), crate::InputError> {
+        // Android Vibrator/VibrationEffect integration point:
+        // This would use Vibrator.vibrate(VibrationEffect.createWaveform(
+        //   timings, amplitudes, -1)) where timings and amplitudes are
+        // derived from translate_pattern output.
+        // Requires Context.getSystemService(Context.VIBRATOR_SERVICE).
         Ok(())
     }
 
     fn play_xr_rumble(&self, _pattern: &HapticPattern) -> Result<(), crate::InputError> {
+        // XR controller rumble integration point:
+        // This would use the XR Input Source API:
+        // XRInputSource.gamepad.hapticActuators[0].pulse(intensity, duration)
+        // Requires an active XR session and input source reference.
         Ok(())
+    }
+
+    pub fn last_events(&self) -> &[HapticEvent] {
+        &self.last_events
     }
 }

@@ -62,11 +62,16 @@ impl ViewportGuard {
     pub fn setup_stencil(
         &self,
         _device: &wgpu::Device,
-        _stencil_value: u32,
+        stencil_value: u32,
     ) -> Option<wgpu::DepthStencilState> {
         if !self.stencil_enabled {
             return None;
         }
+
+        let compare = wgpu::CompareFunction::Equal;
+        let pass_op = wgpu::StencilOperation::Keep;
+        let read_mask = (stencil_value | 0xFF).min(0xFF) as u32;
+        let write_mask = 0xFFu32;
 
         Some(wgpu::DepthStencilState {
             format: wgpu::TextureFormat::Depth32FloatStencil8,
@@ -74,21 +79,27 @@ impl ViewportGuard {
             depth_compare: wgpu::CompareFunction::Always,
             stencil: wgpu::StencilState {
                 front: wgpu::StencilFaceState {
-                    compare: wgpu::CompareFunction::Always,
+                    compare,
                     fail_op: wgpu::StencilOperation::Keep,
                     depth_fail_op: wgpu::StencilOperation::Keep,
-                    pass_op: wgpu::StencilOperation::Replace,
+                    pass_op,
                 },
                 back: wgpu::StencilFaceState {
-                    compare: wgpu::CompareFunction::Always,
+                    compare,
                     fail_op: wgpu::StencilOperation::Keep,
                     depth_fail_op: wgpu::StencilOperation::Keep,
-                    pass_op: wgpu::StencilOperation::Replace,
+                    pass_op,
                 },
-                read_mask: 0xFFFFFFFF,
-                write_mask: 0xFFFFFFFF,
+                read_mask,
+                write_mask,
             },
             bias: wgpu::DepthBiasState::default(),
         })
+    }
+
+    pub fn apply_stencil_reference(&self, pass: &mut wgpu::RenderPass<'_>, stencil_value: u32) {
+        if self.stencil_enabled {
+            pass.set_stencil_reference(stencil_value);
+        }
     }
 }
