@@ -27,7 +27,12 @@ impl DirtyRectTracker {
     }
 
     pub fn mark_dirty(&mut self, x: f32, y: f32, width: f32, height: f32) {
-        let new_rect = DirtyRect { x, y, width, height };
+        let new_rect = DirtyRect {
+            x,
+            y,
+            width,
+            height,
+        };
 
         let mut merged = false;
         for existing in &mut self.current_rects {
@@ -70,10 +75,7 @@ impl DirtyRectTracker {
     }
 
     pub fn total_dirty_area(&self) -> f32 {
-        self.current_rects
-            .iter()
-            .map(|r| r.width * r.height)
-            .sum()
+        self.current_rects.iter().map(|r| r.width * r.height).sum()
     }
 
     pub fn merge_all(&mut self) {

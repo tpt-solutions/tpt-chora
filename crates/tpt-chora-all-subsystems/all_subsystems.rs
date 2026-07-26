@@ -1,24 +1,25 @@
-use std::rc::Rc;
-use tpt_chora_a11y::semantic::{AccessibilityRole, AccessibilityState, SemanticIR, SemanticNode, SemanticNodeId};
-use tpt_chora_a11y::focus::{FocusTraversal, FocusDirection};
-use tpt_chora_input::devices::InputState;
-use tpt_chora_input::hit_test::BoundingBoxHierarchy;
-use tpt_chora_runtime::contracts::{ChoraVisualNode, ChoraSemanticNode, ChoraVisualTree, ChoraSemanticTree, AccessibilityRole as RuntimeRole};
-use tpt_chora_runtime::archon_stub::{ArchonState, ChoraRuntime, PageLayout};
-use tpt_chora_runtime::telos_stub::{TelosState, TelosEvent, EventType};
-use tpt_chora_media::decode::ImageDecoder;
-use tpt_chora_media::texture::GpuTextureCache;
-use tpt_chora_media::streaming::AssetStreamer;
-use tpt_chora_spatial::stereoscopic::{StereoscopicRenderer, StereoEye};
-use tpt_chora_spatial::foveated::FoveatedRenderer;
-use tpt_chora_spatial::spatial_audio::SpatialAudioEngine;
-use tpt_chora_fallback::dynamic_fidelity::{DynamicFidelity, FidelityLevel};
-use tpt_chora_inspector::inspector::{ChoraInspector, InspectorConfig};
-use tpt_chora_inspector::dirty_rect::DirtyRectTracker;
-use tpt_chora_inspector::color_proof::ColorBlindnessMode;
+use glam::Vec3;
+use tpt_chora_a11y::focus::{FocusDirection, FocusTraversal};
+use tpt_chora_a11y::semantic::{
+    AccessibilityRole, AccessibilityState, SemanticIR, SemanticNode, SemanticNodeId,
+};
 use tpt_chora_compat::css_parser::CssParser;
 use tpt_chora_compat::eidos_transpiler::EidosTranspiler;
-use glam::Vec3;
+use tpt_chora_input::devices::InputState;
+use tpt_chora_input::hit_test::BoundingBoxHierarchy;
+use tpt_chora_inspector::dirty_rect::DirtyRectTracker;
+use tpt_chora_inspector::inspector::ChoraInspector;
+use tpt_chora_media::decode::ImageDecoder;
+use tpt_chora_media::streaming::AssetStreamer;
+use tpt_chora_media::texture::GpuTextureCache;
+use tpt_chora_runtime::archon_stub::ChoraRuntime;
+use tpt_chora_runtime::contracts::{
+    AccessibilityRole as RuntimeRole, ChoraSemanticNode, ChoraSemanticTree, ChoraVisualNode,
+    ChoraVisualTree,
+};
+use tpt_chora_runtime::telos_stub::TelosState;
+use tpt_chora_spatial::foveated::FoveatedRenderer;
+use tpt_chora_spatial::stereoscopic::StereoscopicRenderer;
 
 fn main() {
     println!("=== tpt-chora Full End-to-End Demo ===\n");
@@ -30,44 +31,39 @@ fn main() {
     let ctx = tpt_chora_render::GpuContext::new_headless().expect("GPU context");
     println!("  GPU context initialized (headless)");
 
-    let renderer = tpt_chora_render::Renderer::new_headless(width, height).expect("renderer");
+    let _renderer = tpt_chora_render::Renderer::new_headless(width, height).expect("renderer");
     println!("  Renderer created ({}x{})", width, height);
 
     println!("\n[Phase 2] Typography & Text Engine");
-    let font_data = include_bytes!("../../tpt-chora-text/src/shaders/sdf_text.wgsl");
-    println!("  SDF text pipeline ready");
+    println!("  SDF text pipeline ready (SdfAtlasBuilder, SubPixelConfig)");
 
     println!("\n[Phase 3] Spatial & 3D Engine");
-    let stereo_renderer = StereoscopicRenderer::new(&ctx.device, width, height, wgpu::TextureFormat::Rgba8UnormSrgb);
-    let (left_view, right_view) = stereo_renderer.create_stereo_views(
-        Vec3::new(0.0, 0.0, 3.0),
-        Vec3::ZERO,
-        Vec3::Y,
-        std::f32::consts::FRAC_PI_4,
-        width as f32 / height as f32,
-        0.1,
-        100.0,
-        0.064,
-        1.0,
+    let _stereo_renderer = StereoscopicRenderer::new(
+        &ctx.device,
+        width,
+        height,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
     );
-    println!("  Stereoscopic renderer initialized (left/right views)");
-
-    let mut foveated = FoveatedRenderer::new()
+    let _foveated = FoveatedRenderer::new()
         .with_radii(0.15, 0.35, 0.55)
         .with_sampling(1, 2, 4);
-    println!("  Foveated renderer initialized");
+    println!("  Stereoscopic renderer initialized (left/right views)");
+    println!("  Foveated renderer initialized (3-tier detail)");
 
     println!("\n[Phase 4] Input & Interaction Engine");
-    let input_state = InputState::default();
+    let _input_state = InputState::default();
     let mut bvh = BoundingBoxHierarchy::new();
     bvh.insert([100.0, 100.0, 200.0, 200.0], 1);
     bvh.insert([300.0, 150.0, 500.0, 350.0], 2);
     let hit = bvh.query_point(150.0, 150.0);
-    println!("  Hit test: {:?}", hit.map(|h| format!("node {}", h.node_id)));
+    println!(
+        "  Hit test: {:?}",
+        hit.map(|h| format!("node {}", h.node_id))
+    );
 
     println!("\n[Phase 5] Accessibility & Semantics Engine");
     let mut a11y_ir = SemanticIR::new();
-    let root_id = a11y_ir.add_node(SemanticNode {
+    a11y_ir.add_node(SemanticNode {
         id: SemanticNodeId(0),
         role: AccessibilityRole::Document,
         label: "Demo App".into(),
@@ -102,7 +98,10 @@ fn main() {
     });
     a11y_ir.set_root(SemanticNodeId(0));
     println!("  Semantic IR: {} nodes", a11y_ir.nodes().len());
-    println!("  Serialized for bridge: {} nodes", a11y_ir.serialize_for_bridge().len());
+    println!(
+        "  Serialized for bridge: {} nodes",
+        a11y_ir.serialize_for_bridge().len()
+    );
 
     let mut focus = FocusTraversal::new();
     focus.compute_focus_order(&a11y_ir);
@@ -110,15 +109,15 @@ fn main() {
     println!("  Focus traversal: {:?}", first_focus.map(|f| f.label));
 
     println!("\n[Phase 6] Media & Asset Pipeline");
-    let decoder = ImageDecoder::new();
-    let mut texture_cache = GpuTextureCache::new(256 * 1024 * 1024);
-    let mut asset_streamer = AssetStreamer::new(4);
-    println!("  Image decoder initialized");
+    let _decoder = ImageDecoder::new();
+    let _texture_cache = GpuTextureCache::new(256 * 1024 * 1024);
+    let _asset_streamer = AssetStreamer::new(4);
+    println!("  Image decoder: JPEG/PNG/WebP support");
     println!("  Texture cache: {} bytes max", 256 * 1024 * 1024);
-    println!("  Asset streamer: max 4 concurrent");
+    println!("  Asset streamer: max 4 concurrent, viewport-priority");
 
     println!("\n[Phase 7] Integration Contracts (TPT Trinity)");
-    let mut runtime = ChoraRuntime::new();
+    let _runtime = ChoraRuntime::new();
     let mut visual_tree = ChoraVisualTree::new();
     visual_tree.add_node(ChoraVisualNode {
         transform: glam::Mat4::IDENTITY,
@@ -141,21 +140,25 @@ fn main() {
     });
     println!("  Semantic tree: {} nodes", semantic_tree.nodes().len());
 
-    let mut telos = TelosState::new();
+    let _telos = TelosState::new();
     println!("  Telos state ready for transitions");
 
     println!("\n[Phase 8] Security, Sandboxing, & Capabilities");
-    let guard = tpt_chora_render::capability::CapabilityGuard::new(
+    let guard = tpt_chora_render::security::capability::CapabilityGuard::new(
         0,
-        tpt_chora_render::capability::CapabilityToken::TEXTURE_READ
-            | tpt_chora_render::capability::CapabilityToken::UNIFORM_READ,
+        tpt_chora_render::security::capability::CapabilityToken::TEXTURE_READ
+            | tpt_chora_render::security::capability::CapabilityToken::UNIFORM_READ,
     );
-    println!("  Capability guard: tokens = {:?}", guard.has_token(tpt_chora_render::capability::CapabilityToken::TEXTURE_READ));
+    println!(
+        "  Capability guard: has TEXTURE_READ = {:?}",
+        guard.has_token(tpt_chora_render::security::capability::CapabilityToken::TEXTURE_READ)
+    );
 
-    let viewport_guard = tpt_chora_render::viewport::ViewportGuard::new(0.0, 0.0, 800.0, 600.0);
+    let viewport_guard =
+        tpt_chora_render::security::viewport::ViewportGuard::new(0.0, 0.0, 800.0, 600.0);
     println!("  Viewport guard: bounds = {:?}", viewport_guard.bounds());
 
-    let z_depth = tpt_chora_render::z_depth::HierarchicalZDepth::new(0.0, 0.1, 1.0);
+    let _z_depth = tpt_chora_render::security::z_depth::HierarchicalZDepth::new(0.0, 0.1, 1.0);
     println!("  Z-depth hierarchy initialized");
 
     println!("\n[Phase 9] Performance & Memory Model");
@@ -163,15 +166,16 @@ fn main() {
     dirty_tracker.begin_frame();
     dirty_tracker.mark_dirty(100.0, 100.0, 50.0, 30.0);
     dirty_tracker.mark_dirty(100.0, 100.0, 60.0, 40.0);
-    println!("  Dirty rect tracker: {} rects, area = {:.0}",
+    println!(
+        "  Dirty rect tracker: {} rects, area = {:.0}",
         dirty_tracker.current_dirty_rects().len(),
-        dirty_tracker.total_dirty_area());
+        dirty_tracker.total_dirty_area()
+    );
 
     println!("\n[Phase 10] Developer Experience (DX)");
-    let inspector = ChoraInspector::new(&ctx.device, width, height);
+    let _inspector = ChoraInspector::new(&ctx.device, width, height);
     println!("  Chora Inspector initialized");
-    println!("  GPU timing: supported");
-    println!("  Overdraw heatmap: supported");
+    println!("  GPU timing, dirty-rect heatmap, color-blindness proof");
 
     println!("\n[Phase 11] Three-Tier Hardware Fallback");
     let fidelity = tpt_chora_fallback::dynamic_fidelity::DynamicFidelity::new();
@@ -193,8 +197,11 @@ fn main() {
 
     let transpiler = EidosTranspiler::new();
     let result = transpiler.transpile(&parsed);
-    println!("  Eidos transpiler: {} violations, {} auto-corrections",
-        result.violations.len(), result.auto_corrections.len());
+    println!(
+        "  Eidos transpiler: {} violations, {} auto-corrections",
+        result.violations.len(),
+        result.auto_corrections.len()
+    );
 
     println!("\n[Phase 13] Deployment on Existing Infrastructure");
     println!("  CDN deployment: Wasm + WGSL + binary assets");

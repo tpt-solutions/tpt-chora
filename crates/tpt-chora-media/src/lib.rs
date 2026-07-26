@@ -1,9 +1,9 @@
 pub mod decode;
-pub mod texture;
-pub mod streaming;
 pub mod error;
+pub mod streaming;
+pub mod texture;
 
+pub use decode::{DecodedImage, ImageDecoder};
 pub use error::MediaError;
-pub use decode::{ImageDecoder, DecodedImage};
-pub use texture::{GpuTextureCache, CachedTexture};
-pub use streaming::{AssetStreamer, AssetPriority, StreamRequest};
+pub use streaming::{AssetPriority, AssetStreamer, StreamRequest};
+pub use texture::{CachedTexture, GpuTextureCache};

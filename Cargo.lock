@@ -1470,6 +1470,7 @@ name = "tpt-chora-fallback"
 version = "0.1.0"
 dependencies = [
  "image",
+ "png 0.18.1",
  "thiserror",
  "tpt-chora-render",
  "wgpu",
@@ -1479,6 +1480,7 @@ dependencies = [
 name = "tpt-chora-input"
 version = "0.1.0"
 dependencies = [
+ "bitflags 2.13.1",
  "bytemuck",
  "glam",
  "thiserror",

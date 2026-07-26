@@ -1,7 +1,7 @@
-use crate::gpu_timing::GpuTimer;
+use crate::color_proof::ColorBlindnessMode;
 use crate::dirty_rect::DirtyRectTracker;
+use crate::gpu_timing::GpuTimer;
 use crate::heatmap::OverdrawHeatmap;
-use crate::color_proof::{ColorBlindnessMode, ColorProof};
 
 pub struct ChoraInspector {
     config: InspectorConfig,
@@ -97,11 +97,11 @@ impl ChoraInspector {
 
     pub fn render_overlay(
         &self,
-        device: &wgpu::Device,
-        encoder: &mut wgpu::CommandEncoder,
-        target_view: &wgpu::TextureView,
-        screen_width: u32,
-        screen_height: u32,
+        _device: &wgpu::Device,
+        _encoder: &mut wgpu::CommandEncoder,
+        _target_view: &wgpu::TextureView,
+        _screen_width: u32,
+        _screen_height: u32,
     ) {
     }
 }

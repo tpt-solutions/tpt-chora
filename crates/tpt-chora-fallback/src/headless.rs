@@ -26,7 +26,8 @@ impl HeadlessRenderer {
     }
 
     pub fn render_frame(&self) -> Result<Vec<u8>, crate::FallbackError> {
-        let pixels = self.renderer
+        let pixels = self
+            .renderer
             .render_frame()
             .map_err(|e| crate::FallbackError::EncodeFailed(e.to_string()))?;
 
@@ -47,9 +48,11 @@ impl HeadlessRenderer {
             );
             encoder.set_color(png::ColorType::Rgba);
             encoder.set_depth(png::BitDepth::Eight);
-            let mut writer = encoder.write_header()
+            let mut writer = encoder
+                .write_header()
                 .map_err(|e| crate::FallbackError::EncodeFailed(e.to_string()))?;
-            writer.write_all(pixels)
+            writer
+                .write_image_data(pixels)
                 .map_err(|e| crate::FallbackError::EncodeFailed(e.to_string()))?;
         }
         Ok(output)
@@ -59,10 +62,7 @@ impl HeadlessRenderer {
         Ok(pixels.to_vec())
     }
 
-    pub fn render_frame_to_file(
-        &self,
-        path: &std::path::Path,
-    ) -> Result<(), crate::FallbackError> {
+    pub fn render_frame_to_file(&self, path: &std::path::Path) -> Result<(), crate::FallbackError> {
         let data = self.render_frame()?;
         std::fs::write(path, data)
             .map_err(|e| crate::FallbackError::EncodeFailed(e.to_string()))?;

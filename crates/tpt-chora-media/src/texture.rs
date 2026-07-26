@@ -80,12 +80,7 @@ impl GpuTextureCache {
         Ok(id)
     }
 
-    pub fn insert_to_queue(
-        &mut self,
-        queue: &wgpu::Queue,
-        id: u64,
-        image: &DecodedImage,
-    ) {
+    pub fn insert_to_queue(&mut self, queue: &wgpu::Queue, id: u64, image: &DecodedImage) {
         if let Some(cached) = self.textures.get(&id) {
             queue.write_texture(
                 wgpu::ImageCopyTexture {
@@ -125,11 +120,7 @@ impl GpuTextureCache {
     }
 
     fn evict_oldest(&mut self) {
-        if let Some((&oldest_id, _)) = self
-            .textures
-            .iter()
-            .min_by_key(|(_, t)| t.last_used_frame)
-        {
+        if let Some((&oldest_id, _)) = self.textures.iter().min_by_key(|(_, t)| t.last_used_frame) {
             self.remove(oldest_id);
         }
     }

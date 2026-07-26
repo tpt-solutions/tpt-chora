@@ -133,8 +133,54 @@ impl StereoscopicRenderer {
         let right_depth = device.create_texture(&depth_desc("chora-stereo-depth-right"));
 
         Self {
-            left_pipeline: pipeline.clone(),
-            right_pipeline: pipeline,
+            left_pipeline: pipeline,
+            right_pipeline: device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("chora-stereo-pipeline-right"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: "vs_main",
+                    buffers: &[wgpu::VertexBufferLayout {
+                        array_stride: 24,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &[
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float32x3,
+                                offset: 0,
+                                shader_location: 0,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float32x3,
+                                offset: 12,
+                                shader_location: 1,
+                            },
+                        ],
+                    }],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: "fs_main",
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    cull_mode: Some(wgpu::Face::Back),
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth32Float,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Less,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+            }),
             left_depth,
             right_depth,
             stereo_bgl,
@@ -164,8 +210,8 @@ impl StereoscopicRenderer {
         let left_view = Mat4::look_at_rh(left_eye, look_at, up);
         let right_view = Mat4::look_at_rh(right_eye, look_at, up);
 
-        let left_offset = eye_separation * 0.5 * near / convergence_distance;
-        let right_offset = -eye_separation * 0.5 * near / convergence_distance;
+        let _left_offset = eye_separation * 0.5 * near / convergence_distance;
+        let _right_offset = -eye_separation * 0.5 * near / convergence_distance;
 
         let left_proj = Mat4::perspective_rh(fov_y, aspect, near, far);
         let right_proj = Mat4::perspective_rh(fov_y, aspect, near, far);
@@ -198,7 +244,16 @@ impl StereoscopicRenderer {
         };
 
         let params = StereoParams {
-            view_projection: (stereo_view.projection * stereo_view.view).to_cols_array(),
+            view_projection: {
+                let mat = stereo_view.projection * stereo_view.view;
+                let cols = mat.to_cols_array();
+                [
+                    [cols[0], cols[1], cols[2], cols[3]],
+                    [cols[4], cols[5], cols[6], cols[7]],
+                    [cols[8], cols[9], cols[10], cols[11]],
+                    [cols[12], cols[13], cols[14], cols[15]],
+                ]
+            },
             eye_offset,
             separation: 0.064,
             convergence: 1.0,
@@ -223,12 +278,14 @@ impl StereoscopicRenderer {
         let (target, depth, pipeline) = match stereo_view.eye {
             StereoEye::Left => (
                 target_left,
-                self.left_depth.create_view(&wgpu::TextureViewDescriptor::default()),
+                self.left_depth
+                    .create_view(&wgpu::TextureViewDescriptor::default()),
                 &self.left_pipeline,
             ),
             StereoEye::Right => (
                 target_right,
-                self.right_depth.create_view(&wgpu::TextureViewDescriptor::default()),
+                self.right_depth
+                    .create_view(&wgpu::TextureViewDescriptor::default()),
                 &self.right_pipeline,
             ),
         };

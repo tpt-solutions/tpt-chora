@@ -32,22 +32,11 @@ impl GpuHitTest {
         }
     }
 
-    pub fn hit_test_2d(
-        &self,
-        x: f32,
-        y: f32,
-        bvh: &BoundingBoxHierarchy,
-    ) -> Option<HitResult> {
+    pub fn hit_test_2d(&self, x: f32, y: f32, bvh: &BoundingBoxHierarchy) -> Option<HitResult> {
         bvh.query_point(x, y)
     }
 
-    pub fn hit_test_gpu(
-        &self,
-        _x: f32,
-        _y: f32,
-        _width: u32,
-        _height: u32,
-    ) -> Option<HitResult> {
+    pub fn hit_test_gpu(&self, _x: f32, _y: f32, _width: u32, _height: u32) -> Option<HitResult> {
         None
     }
 }

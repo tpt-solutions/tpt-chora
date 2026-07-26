@@ -34,10 +34,7 @@ impl ViewportGuard {
     }
 
     pub fn is_point_inside(&self, x: f32, y: f32) -> bool {
-        x >= self.bounds[0]
-            && x <= self.bounds[2]
-            && y >= self.bounds[1]
-            && y <= self.bounds[3]
+        x >= self.bounds[0] && x <= self.bounds[2] && y >= self.bounds[1] && y <= self.bounds[3]
     }
 
     pub fn intersects(&self, other: &ViewportGuard) -> bool {

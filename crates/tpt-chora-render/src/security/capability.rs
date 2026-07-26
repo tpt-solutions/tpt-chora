@@ -94,7 +94,11 @@ impl std::fmt::Display for ShaderAccessViolation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TextureDenied { owner, texture } => {
-                write!(f, "component {} denied access to texture {}", owner, texture)
+                write!(
+                    f,
+                    "component {} denied access to texture {}",
+                    owner, texture
+                )
             }
             Self::BufferDenied { owner, buffer } => {
                 write!(f, "component {} denied access to buffer {}", owner, buffer)

@@ -31,12 +31,7 @@ impl SpatialAudioEngine {
         }
     }
 
-    pub fn update_listener(
-        &mut self,
-        position: Vec3,
-        forward: Vec3,
-        up: Vec3,
-    ) {
+    pub fn update_listener(&mut self, position: Vec3, forward: Vec3, up: Vec3) {
         self.listener_pos = position;
         self.listener_forward = forward.normalize();
         self.listener_up = up.normalize();

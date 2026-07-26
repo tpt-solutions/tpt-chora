@@ -1,9 +1,11 @@
-pub mod contracts;
 pub mod archon_stub;
-pub mod telos_stub;
+pub mod contracts;
 pub mod error;
+pub mod telos_stub;
 
-pub use contracts::{ChoraVisualNode, ChoraSemanticNode, GpuMeshHandle, GpuMaterialHandle, GpuTextureHandle};
 pub use archon_stub::{ArchonPage, ArchonState, ChoraRuntime};
-pub use telos_stub::{TelosEvent, TelosState, StateMutation};
+pub use contracts::{
+    ChoraSemanticNode, ChoraVisualNode, GpuMaterialHandle, GpuMeshHandle, GpuTextureHandle,
+};
 pub use error::RuntimeError;
+pub use telos_stub::{StateMutation, TelosEvent, TelosState};

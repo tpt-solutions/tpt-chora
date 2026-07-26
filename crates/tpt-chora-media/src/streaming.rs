@@ -1,5 +1,5 @@
-use std::collections::BinaryHeap;
 use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 
 pub struct AssetStreamer {
     requests: BinaryHeap<PrioritizedRequest>,
@@ -114,9 +114,5 @@ impl AssetStreamer {
         self.in_flight
     }
 
-    pub fn prioritize_viewport(
-        &mut self,
-        viewport_bounds: [f32; 4],
-    ) {
-    }
+    pub fn prioritize_viewport(&mut self, viewport_bounds: [f32; 4]) {}
 }

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
 pub struct ArchonPage {
@@ -44,7 +45,7 @@ impl ArchonState {
 
 pub struct ChoraRuntime {
     archon: ArchonState,
-    gpu_buffers: Vec<wgpu::Buffer>,
+    gpu_buffers: Vec<Arc<wgpu::Buffer>>,
 }
 
 impl ChoraRuntime {
@@ -59,15 +60,15 @@ impl ChoraRuntime {
         &mut self,
         device: &wgpu::Device,
         page: &ArchonPage,
-    ) -> wgpu::Buffer {
+    ) -> Arc<wgpu::Buffer> {
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("chora-archon-state"),
             contents: &page.data,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
         let idx = self.gpu_buffers.len();
-        self.gpu_buffers.push(buffer);
-        self.gpu_buffers[idx].clone()
+        self.gpu_buffers.push(Arc::new(buffer));
+        Arc::clone(&self.gpu_buffers[idx])
     }
 
     pub fn archon(&self) -> &ArchonState {

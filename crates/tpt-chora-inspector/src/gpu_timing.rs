@@ -26,7 +26,7 @@ impl GpuTimer {
         }
     }
 
-    pub fn begin_query(&mut self, device: &wgpu::Device, label: &str) -> u32 {
+    pub fn begin_query(&mut self, _device: &wgpu::Device, label: &str) -> u32 {
         let id = self.next_id;
         self.next_id += 1;
 
@@ -40,9 +40,8 @@ impl GpuTimer {
         id
     }
 
-    pub fn end_query(&mut self, device: &wgpu::Device, id: u32) {
-        if let Some(query) = self.queries.iter_mut().find(|q| q.id == id) {
-        }
+    pub fn end_query(&mut self, _device: &wgpu::Device, id: u32) {
+        if let Some(query) = self.queries.iter_mut().find(|q| q.id == id) {}
     }
 
     pub fn readback(&mut self) -> Vec<TimingResult> {
@@ -53,8 +52,8 @@ impl GpuTimer {
 
     pub fn resolve_queries(
         &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        query_set: &wgpu::QuerySet,
+        _encoder: &mut wgpu::CommandEncoder,
+        _query_set: &wgpu::QuerySet,
     ) {
     }
 }

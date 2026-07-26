@@ -58,7 +58,8 @@ impl ImageDecoder {
             Ok(ImageFormat::Rgb8)
         } else if data.len() >= 12 && data[0..4] == [0x52, 0x49, 0x46, 0x46] {
             Ok(ImageFormat::Rgba8)
-        } else if data.starts_with(b"VP8") || data.starts_with(b"VP8L") || data.starts_with(b"VP8X") {
+        } else if data.starts_with(b"VP8") || data.starts_with(b"VP8L") || data.starts_with(b"VP8X")
+        {
             Ok(ImageFormat::Rgba8)
         } else {
             Err(crate::MediaError::UnsupportedFormat)

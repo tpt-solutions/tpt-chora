@@ -34,12 +34,7 @@ impl FoveatedRenderer {
         self
     }
 
-    pub fn with_sampling(
-        mut self,
-        inner: u32,
-        mid: u32,
-        outer: u32,
-    ) -> Self {
+    pub fn with_sampling(mut self, inner: u32, mid: u32, outer: u32) -> Self {
         self.inner_samples = inner;
         self.mid_samples = mid;
         self.outer_samples = outer;

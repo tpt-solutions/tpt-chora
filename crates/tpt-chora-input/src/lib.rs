@@ -1,15 +1,14 @@
 pub mod devices;
+pub mod error;
 pub mod haptics;
 pub mod hit_test;
 pub mod intent;
-pub mod error;
 
-pub use error::InputError;
 pub use devices::{
-    DeviceCapability, DeviceEvent, InputDeviceKind, InputDeviceInfo, InputEvent, InputState,
-    MouseState, TouchState, KeyboardState, PenState, GamepadState,
-    GazeState, GestureIntent,
+    DeviceCapability, DeviceEvent, GamepadState, GazeState, GestureIntent, InputDeviceInfo,
+    InputDeviceKind, InputEvent, InputState, KeyboardState, MouseState, PenState, TouchState,
 };
+pub use error::InputError;
 pub use haptics::{HapticFeedback, HapticPattern, HapticRouter};
-pub use hit_test::{GpuHitTest, HitResult, BoundingBoxHierarchy};
-pub use intent::{InteractionIntent, IntentResolver};
+pub use hit_test::{BoundingBoxHierarchy, GpuHitTest, HitResult};
+pub use intent::{IntentResolver, InteractionIntent};

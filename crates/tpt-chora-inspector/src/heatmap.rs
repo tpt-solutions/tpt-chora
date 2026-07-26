@@ -29,15 +29,7 @@ impl OverdrawHeatmap {
         }
     }
 
-    pub fn record_triangle(
-        &mut self,
-        x0: f32,
-        y0: f32,
-        x1: f32,
-        y1: f32,
-        x2: f32,
-        y2: f32,
-    ) {
+    pub fn record_triangle(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, x2: f32, y2: f32) {
         let min_x = x0.min(x1).min(x2) as u32;
         let max_x = (x0.max(x1).max(x2) as u32).min(self.width - 1);
         let min_y = y0.min(y1).min(y2) as u32;
@@ -84,7 +76,7 @@ impl OverdrawHeatmap {
 
     pub fn to_rgba_texture_data(&self) -> Vec<u8> {
         let cells_x = (self.width + self.cell_size - 1) / self.cell_size;
-        let cells_y = (self.height + self.cell_size - 1) / self.cell_size;
+        let _cells_y = (self.height + self.cell_size - 1) / self.cell_size;
         let mut data = vec![0u8; (self.width * self.height * 4) as usize];
 
         for (i, &count) in self.cells.iter().enumerate() {

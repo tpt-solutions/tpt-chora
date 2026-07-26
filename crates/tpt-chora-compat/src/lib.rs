@@ -1,12 +1,12 @@
-pub mod deployment;
 pub mod css_parser;
+pub mod deployment;
 pub mod eidos_transpiler;
-pub mod web_component;
-pub mod ffi_bridge;
 pub mod error;
+pub mod ffi_bridge;
+pub mod web_component;
 
-pub use error::CompatError;
-pub use css_parser::{CssParser, ParsedCss, CssRule};
+pub use css_parser::{CssParser, CssRule, ParsedCss};
 pub use eidos_transpiler::{EidosTranspiler, TranspileResult, Violation};
-pub use web_component::{WebComponentConfig, ComponentBridge};
+pub use error::CompatError;
 pub use ffi_bridge::{FfiBridge, WasmModule};
+pub use web_component::{ComponentBridge, WebComponentConfig};

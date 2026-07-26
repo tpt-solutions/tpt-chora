@@ -14,6 +14,12 @@ bitflags! {
     }
 }
 
+impl Default for DeviceCapability {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputDeviceKind {
     Mouse,
@@ -26,22 +32,83 @@ pub enum InputDeviceKind {
 
 #[derive(Debug, Clone)]
 pub enum DeviceEvent {
-    MouseMove { x: f32, y: f32 },
-    MouseDown { button: MouseButton, x: f32, y: f32 },
-    MouseUp { button: MouseButton, x: f32, y: f32 },
-    MouseWheel { delta_x: f32, delta_y: f32 },
-    KeyDown { key: KeyCode, modifiers: Modifiers },
-    KeyUp { key: KeyCode, modifiers: Modifiers },
-    TouchBegin { id: u64, x: f32, y: f32 },
-    TouchMove { id: u64, x: f32, y: f32 },
-    TouchEnd { id: u64, x: f32, y: f32 },
-    PenDown { x: f32, y: f32, pressure: f32, tilt_x: f32, tilt_y: f32 },
-    PenMove { x: f32, y: f32, pressure: f32, tilt_x: f32, tilt_y: f32 },
-    PenUp { x: f32, y: f32 },
-    GamepadButton { controller: u32, button: u32, pressed: bool },
-    GamepadAxis { controller: u32, axis: u32, value: f32 },
-    GazePoint { x: f32, y: f32, confidence: f32 },
-    PinchStart { confidence: f32 },
+    MouseMove {
+        x: f32,
+        y: f32,
+    },
+    MouseDown {
+        button: MouseButton,
+        x: f32,
+        y: f32,
+    },
+    MouseUp {
+        button: MouseButton,
+        x: f32,
+        y: f32,
+    },
+    MouseWheel {
+        delta_x: f32,
+        delta_y: f32,
+    },
+    KeyDown {
+        key: KeyCode,
+        modifiers: Modifiers,
+    },
+    KeyUp {
+        key: KeyCode,
+        modifiers: Modifiers,
+    },
+    TouchBegin {
+        id: u64,
+        x: f32,
+        y: f32,
+    },
+    TouchMove {
+        id: u64,
+        x: f32,
+        y: f32,
+    },
+    TouchEnd {
+        id: u64,
+        x: f32,
+        y: f32,
+    },
+    PenDown {
+        x: f32,
+        y: f32,
+        pressure: f32,
+        tilt_x: f32,
+        tilt_y: f32,
+    },
+    PenMove {
+        x: f32,
+        y: f32,
+        pressure: f32,
+        tilt_x: f32,
+        tilt_y: f32,
+    },
+    PenUp {
+        x: f32,
+        y: f32,
+    },
+    GamepadButton {
+        controller: u32,
+        button: u32,
+        pressed: bool,
+    },
+    GamepadAxis {
+        controller: u32,
+        axis: u32,
+        value: f32,
+    },
+    GazePoint {
+        x: f32,
+        y: f32,
+        confidence: f32,
+    },
+    PinchStart {
+        confidence: f32,
+    },
     PinchEnd,
 }
 
@@ -55,14 +122,72 @@ pub enum MouseButton {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KeyCode {
-    A, B, C, D, E, F, G, H, I, J, K, L, M,
-    N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
-    Num0, Num1, Num2, Num3, Num4, Num5, Num6, Num7, Num8, Num9,
-    Space, Enter, Escape, Tab, Backspace, Delete,
-    ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
-    Home, End, PageUp, PageDown,
-    F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
-    Shift, Control, Alt, Meta,
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+    H,
+    I,
+    J,
+    K,
+    L,
+    M,
+    N,
+    O,
+    P,
+    Q,
+    R,
+    S,
+    T,
+    U,
+    V,
+    W,
+    X,
+    Y,
+    Z,
+    Num0,
+    Num1,
+    Num2,
+    Num3,
+    Num4,
+    Num5,
+    Num6,
+    Num7,
+    Num8,
+    Num9,
+    Space,
+    Enter,
+    Escape,
+    Tab,
+    Backspace,
+    Delete,
+    ArrowUp,
+    ArrowDown,
+    ArrowLeft,
+    ArrowRight,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    F1,
+    F2,
+    F3,
+    F4,
+    F5,
+    F6,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12,
+    Shift,
+    Control,
+    Alt,
+    Meta,
     Unknown(u32),
 }
 

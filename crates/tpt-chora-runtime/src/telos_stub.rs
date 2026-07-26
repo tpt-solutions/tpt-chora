@@ -46,7 +46,9 @@ impl TelosState {
         event: &TelosEvent,
         proofs: &[EidosProof],
     ) -> Option<StateMutation> {
-        let proof_valid = proofs.iter().any(|p| p.target_id == event.target_id && p.valid);
+        let proof_valid = proofs
+            .iter()
+            .any(|p| p.target_id == event.target_id && p.valid);
         if !proof_valid {
             return None;
         }

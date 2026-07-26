@@ -26,8 +26,7 @@ impl ComponentBridge {
         vec![0u8; (width * height * 4) as usize]
     }
 
-    pub fn handle_event(&self, _event_type: &str, _data: &[u8]) {
-    }
+    pub fn handle_event(&self, _event_type: &str, _data: &[u8]) {}
 
     pub fn config(&self) -> &WebComponentConfig {
         &self.config

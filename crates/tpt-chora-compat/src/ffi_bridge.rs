@@ -16,7 +16,11 @@ impl FfiBridge {
         }
     }
 
-    pub fn register_module(&mut self, name: String, data: &[u8]) -> Result<u64, crate::CompatError> {
+    pub fn register_module(
+        &mut self,
+        name: String,
+        data: &[u8],
+    ) -> Result<u64, crate::CompatError> {
         let id = self.modules.len() as u64;
         self.modules.push(WasmModule {
             id,

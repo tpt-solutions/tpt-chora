@@ -30,6 +30,7 @@ pub struct TextVertex {
 impl SdfTextPipeline {
     pub fn new(
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         atlas: &FontAtlas,
         target_format: wgpu::TextureFormat,
     ) -> Self {

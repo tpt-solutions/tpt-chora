@@ -1,4 +1,4 @@
-use crate::css_parser::{ParsedCss, CssRule, CssDeclaration};
+use crate::css_parser::{CssDeclaration, CssRule, ParsedCss};
 
 pub struct EidosTranspiler {
     safety_checks: bool,
@@ -59,10 +59,8 @@ impl EidosTranspiler {
                                 "{}.{}: auto-corrected '{}' to '{}'",
                                 rule.selector, decl.property, decl.value, corrected
                             ));
-                            node_ir.push_str(&format!(
-                                "  {} := \"{}\";\n",
-                                decl.property, corrected
-                            ));
+                            node_ir
+                                .push_str(&format!("  {} := \"{}\";\n", decl.property, corrected));
                         } else {
                             violations.push(violation);
                             node_ir.push_str(&format!(
@@ -74,10 +72,7 @@ impl EidosTranspiler {
                     }
                 }
 
-                node_ir.push_str(&format!(
-                    "  {} := \"{}\";\n",
-                    decl.property, decl.value
-                ));
+                node_ir.push_str(&format!("  {} := \"{}\";\n", decl.property, decl.value));
             }
 
             node_ir.push_str("}\n\n");
@@ -91,11 +86,7 @@ impl EidosTranspiler {
         }
     }
 
-    fn check_violation(
-        &self,
-        rule: &CssRule,
-        decl: &CssDeclaration,
-    ) -> Option<Violation> {
+    fn check_violation(&self, rule: &CssRule, decl: &CssDeclaration) -> Option<Violation> {
         match decl.property.as_str() {
             "overflow" if decl.value == "visible" => Some(Violation {
                 rule_selector: rule.selector.clone(),
@@ -109,30 +100,24 @@ impl EidosTranspiler {
                 reason: ViolationReason::UnsafeZIndex,
                 auto_corrected: false,
             }),
-            "position" if decl.value == "absolute" || decl.value == "fixed" => {
-                Some(Violation {
-                    rule_selector: rule.selector.clone(),
-                    property: decl.property.clone(),
-                    reason: ViolationReason::AbsolutePositioning,
-                    auto_corrected: false,
-                })
-            }
-            "width" if decl.value == "auto" || decl.value == "100vw" => {
-                Some(Violation {
-                    rule_selector: rule.selector.clone(),
-                    property: decl.property.clone(),
-                    reason: ViolationReason::UnboundedWidth,
-                    auto_corrected: false,
-                })
-            }
-            "height" if decl.value == "auto" || decl.value == "100vh" => {
-                Some(Violation {
-                    rule_selector: rule.selector.clone(),
-                    property: decl.property.clone(),
-                    reason: ViolationReason::UnboundedHeight,
-                    auto_corrected: false,
-                })
-            }
+            "position" if decl.value == "absolute" || decl.value == "fixed" => Some(Violation {
+                rule_selector: rule.selector.clone(),
+                property: decl.property.clone(),
+                reason: ViolationReason::AbsolutePositioning,
+                auto_corrected: false,
+            }),
+            "width" if decl.value == "auto" || decl.value == "100vw" => Some(Violation {
+                rule_selector: rule.selector.clone(),
+                property: decl.property.clone(),
+                reason: ViolationReason::UnboundedWidth,
+                auto_corrected: false,
+            }),
+            "height" if decl.value == "auto" || decl.value == "100vh" => Some(Violation {
+                rule_selector: rule.selector.clone(),
+                property: decl.property.clone(),
+                reason: ViolationReason::UnboundedHeight,
+                auto_corrected: false,
+            }),
             "font-size" => {
                 if let Some(size) = self.parse_font_size(&decl.value) {
                     if size < 10.0 {

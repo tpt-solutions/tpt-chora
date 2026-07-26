@@ -7,11 +7,7 @@ pub struct A11yBridge {
     nsaccessibility: Option<MacOSAccessibility>,
     #[cfg(target_os = "android")]
     uiautomator: Option<AndroidUIAutomator>,
-    #[cfg(not(any(
-        target_os = "windows",
-        target_os = "macos",
-        target_os = "android"
-    )))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "android")))]
     stub: Option<StubBridge>,
 }
 
@@ -49,20 +45,14 @@ impl A11yBridge {
             nsaccessibility: Some(MacOSAccessibility),
             #[cfg(target_os = "android")]
             uiautomator: Some(AndroidUIAutomator),
-            #[cfg(not(any(
-                target_os = "windows",
-                target_os = "macos",
-                target_os = "android"
-            )))]
+            #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "android")))]
             stub: Some(StubBridge),
         }
     }
 
     pub fn update_tree(&self, ir: &SemanticIR) -> Result<(), crate::A11yError> {
         let nodes = ir.serialize_for_bridge();
-        let focused = ir.root().and_then(|r| {
-            r.children.first().map(|&id| id.0)
-        });
+        let focused = ir.root().and_then(|r| r.children.first().map(|&id| id.0));
         let update = A11yTreeUpdate {
             nodes,
             focused_node: focused,

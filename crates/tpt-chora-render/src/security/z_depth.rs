@@ -44,10 +44,7 @@ impl HierarchicalZDepth {
         has_modal_capability: bool,
     ) -> Result<(), ZDepthViolation> {
         if child_z <= parent_z {
-            return Err(ZDepthViolation::ChildBehindParent {
-                parent_z,
-                child_z,
-            });
+            return Err(ZDepthViolation::ChildBehindParent { parent_z, child_z });
         }
 
         if child_z - parent_z > self.slice_size * 2.0 && !has_modal_capability {
@@ -76,11 +73,7 @@ impl std::fmt::Display for ZDepthViolation {
                 write!(f, "z-depth {} exceeds maximum {}", requested, max)
             }
             Self::ModalRequired { requested_z } => {
-                write!(
-                    f,
-                    "z-depth {} requires Modal capability",
-                    requested_z,
-                )
+                write!(f, "z-depth {} requires Modal capability", requested_z,)
             }
             Self::ChildBehindParent { parent_z, child_z } => {
                 write!(

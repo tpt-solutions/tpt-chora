@@ -1,7 +1,7 @@
 pub mod atlas;
 pub mod error;
-pub mod shaping;
 pub mod sdf;
+pub mod shaping;
 pub mod subpixel;
 
 pub use atlas::{FontAtlas, GlyphInfo, SdfAtlasBuilder};

@@ -125,7 +125,11 @@ impl CssParser {
     }
 
     fn peek(&self) -> char {
-        self.input.as_bytes().get(self.position).copied().unwrap_or(b' ') as char
+        self.input
+            .as_bytes()
+            .get(self.position)
+            .copied()
+            .unwrap_or(b' ') as char
     }
 
     fn peek_next(&self) -> Option<char> {

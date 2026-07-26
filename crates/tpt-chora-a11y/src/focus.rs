@@ -1,4 +1,6 @@
-use crate::semantic::{AccessibilityRole, AccessibilityState, SemanticIR, SemanticNode, SemanticNodeId};
+use crate::semantic::{
+    AccessibilityRole, AccessibilityState, SemanticIR, SemanticNode, SemanticNodeId,
+};
 
 pub struct FocusTraversal {
     current_focus: Option<SemanticNodeId>,
@@ -34,42 +36,7 @@ impl FocusTraversal {
     pub fn compute_focus_order(&mut self, ir: &SemanticIR) {
         self.focus_order.clear();
         if let Some(root) = ir.root() {
-            let children: Vec<SemanticNodeId> = root.children.clone();
             compute_subtree_order(ir, root, &mut self.focus_order);
-            for child_id in children {
-                if let Some(child) = ir.get_node(child_id) {
-                    compute_subtree_order(ir, child, &mut self.focus_order);
-                }
-            }
-        }
-    }
-}
-
-fn compute_subtree_order(
-    ir: &SemanticIR,
-    node: &SemanticNode,
-    order: &mut Vec<SemanticNodeId>,
-) {
-    if !node.state.contains(AccessibilityState::HIDDEN)
-        && node.role != AccessibilityRole::Separator
-    {
-        order.push(node.id);
-    }
-    for &child_id in &node.children {
-        if let Some(child) = ir.get_node(child_id) {
-            compute_subtree_order(ir, child, order);
-        }
-    }
-}
-        if !node.state.contains(AccessibilityState::HIDDEN)
-            && node.role != AccessibilityRole::Separator
-        {
-            order.push(node.id);
-        }
-        for &child_id in &node.children {
-            if let Some(child) = ir.get_node(child_id) {
-                self.compute_subtree_order(ir, child, order);
-            }
         }
     }
 
@@ -186,5 +153,17 @@ fn compute_subtree_order(
 
     pub fn clear_focus(&mut self) {
         self.current_focus = None;
+    }
+}
+
+fn compute_subtree_order(ir: &SemanticIR, node: &SemanticNode, order: &mut Vec<SemanticNodeId>) {
+    if !node.state.contains(AccessibilityState::HIDDEN) && node.role != AccessibilityRole::Separator
+    {
+        order.push(node.id);
+    }
+    for &child_id in &node.children {
+        if let Some(child) = ir.get_node(child_id) {
+            compute_subtree_order(ir, child, order);
+        }
     }
 }
