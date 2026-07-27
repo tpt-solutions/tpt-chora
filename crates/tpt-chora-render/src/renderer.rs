@@ -11,6 +11,7 @@ use wgpu::util::DeviceExt;
 use crate::error::RenderError;
 use crate::graph::{GraphNode, NodeExecuteCtx, RenderGraph, ResourceId, TransientTextureDesc};
 use crate::postprocess::{ColorGradeParams, PostProcessPipeline};
+use crate::security::{SecurityContext, ViewportGuard};
 use crate::vector::{circle_path, tessellate_cubics_gpu};
 
 const SCENE_COLOR: ResourceId = ResourceId("scene_color");
@@ -20,6 +21,7 @@ const FINAL_COLOR: ResourceId = ResourceId("final_color");
 /// own backend list (Vulkan/Metal/DX12/GL) and, when no hardware adapter
 /// is present, wgpu's software rasterizer (Tier 1 of the fallback
 /// strategy) automatically.
+#[derive(Debug)]
 pub struct GpuContext {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -32,14 +34,26 @@ impl GpuContext {
 
     async fn new_headless_async() -> Result<Self, RenderError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
-        let adapter = instance
+        let adapter = match instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: None,
                 force_fallback_adapter: false,
             })
             .await
-            .ok_or(RenderError::NoAdapter)?;
+        {
+            Some(a) => a,
+            None => {
+                instance
+                    .request_adapter(&wgpu::RequestAdapterOptions {
+                        power_preference: wgpu::PowerPreference::default(),
+                        compatible_surface: None,
+                        force_fallback_adapter: true,
+                    })
+                    .await
+                    .ok_or(RenderError::NoAdapter)?
+            }
+        };
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
@@ -65,6 +79,7 @@ pub struct Renderer {
     scene_bgl: Rc<wgpu::BindGroupLayout>,
     postprocess: Rc<PostProcessPipeline>,
     color_format: wgpu::TextureFormat,
+    security: SecurityContext,
 }
 
 impl Renderer {
@@ -139,6 +154,18 @@ impl Renderer {
         let postprocess =
             PostProcessPipeline::new(&ctx.device, color_format, ColorGradeParams::default());
 
+        use crate::security::CapabilityToken;
+        use crate::security::HierarchicalZDepth;
+        let security = SecurityContext::new(
+            0,
+            CapabilityToken::TEXTURE_READ
+                | CapabilityToken::TEXTURE_WRITE
+                | CapabilityToken::UNIFORM_READ
+                | CapabilityToken::RENDER_TARGET,
+            [0.0, 0.0, width as f32, height as f32],
+            HierarchicalZDepth::new(0.0, 1.0, 1000.0),
+        );
+
         Ok(Self {
             ctx,
             width,
@@ -147,6 +174,7 @@ impl Renderer {
             scene_bgl: Rc::new(scene_bgl),
             postprocess: Rc::new(postprocess),
             color_format,
+            security,
         })
     }
 
@@ -178,7 +206,7 @@ impl Renderer {
         // on the GPU (spec.txt §2.1 "Vector Graphics"), then fan-triangulated
         // around its center for filling.
         let curves = circle_path([0.4, 0.0], 0.35);
-        let path_points = tessellate_cubics_gpu(device, queue, &curves, 32);
+        let path_points = tessellate_cubics_gpu(device, queue, &curves, 32)?;
         let mut path_vertices = Vec::with_capacity(path_points.len() + 1);
         path_vertices.push([0.4f32, 0.0]);
         path_vertices.extend(path_points.iter().copied());
@@ -212,6 +240,7 @@ impl Renderer {
         let width = self.width;
         let height = self.height;
         let color_format = self.color_format;
+        let viewport = ViewportGuard::new(0.0, 0.0, width as f32, height as f32);
 
         let mut graph = RenderGraph::new();
 
@@ -255,6 +284,8 @@ impl Renderer {
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 });
+                viewport.apply_scissor(&mut pass, height as f32);
+
                 pass.set_pipeline(&scene_pipeline);
 
                 pass.set_bind_group(0, &tri_bg, &[]);
@@ -296,15 +327,15 @@ impl Renderer {
             ),
         );
 
-        graph.execute(device, queue)?;
+        graph.execute(device, queue, Some(&self.security))?;
 
         let final_texture = graph
             .texture(FINAL_COLOR)
             .expect("postprocess node always allocates final_color");
-        Ok(self.read_back_rgba(final_texture))
+        self.read_back_rgba(final_texture)
     }
 
-    fn read_back_rgba(&self, texture: &wgpu::Texture) -> Vec<u8> {
+    fn read_back_rgba(&self, texture: &wgpu::Texture) -> Result<Vec<u8>, RenderError> {
         let device = &self.ctx.device;
         let queue = &self.ctx.queue;
         let width = self.width;
@@ -356,8 +387,8 @@ impl Renderer {
         });
         device.poll(wgpu::Maintain::Wait);
         rx.recv()
-            .expect("map_async callback dropped without a result")
-            .expect("failed to map readback buffer");
+            .map_err(|e| RenderError::Readback(format!("channel closed: {e}")))?
+            .map_err(|e| RenderError::Readback(format!("map failed: {e}")))?;
 
         let data = slice.get_mapped_range();
         let mut pixels = Vec::with_capacity((unpadded_bytes_per_row * height) as usize);
@@ -368,6 +399,6 @@ impl Renderer {
         }
         drop(data);
         staging.unmap();
-        pixels
+        Ok(pixels)
     }
 }

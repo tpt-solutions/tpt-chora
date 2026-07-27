@@ -108,7 +108,7 @@ impl FocusTraversal {
                                     let b_dist = ((b.bounds[0] + b.bounds[2]) * 0.5
                                         - (current_bounds[0] + current_bounds[2]) * 0.5)
                                         .abs();
-                                    a_dist.partial_cmp(&b_dist).unwrap()
+                                    a_dist.total_cmp(&b_dist)
                                 }),
                             FocusDirection::Down => candidates
                                 .iter()
@@ -120,7 +120,7 @@ impl FocusTraversal {
                                     let b_dist = ((b.bounds[0] + b.bounds[2]) * 0.5
                                         - (current_bounds[0] + current_bounds[2]) * 0.5)
                                         .abs();
-                                    a_dist.partial_cmp(&b_dist).unwrap()
+                                    a_dist.total_cmp(&b_dist)
                                 }),
                             _ => unreachable!(),
                         };
@@ -156,6 +156,12 @@ impl FocusTraversal {
     }
 }
 
+impl Default for FocusTraversal {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn compute_subtree_order(ir: &SemanticIR, node: &SemanticNode, order: &mut Vec<SemanticNodeId>) {
     if !node.state.contains(AccessibilityState::HIDDEN) && node.role != AccessibilityRole::Separator
     {
@@ -165,5 +171,192 @@ fn compute_subtree_order(ir: &SemanticIR, node: &SemanticNode, order: &mut Vec<S
         if let Some(child) = ir.get_node(child_id) {
             compute_subtree_order(ir, child, order);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_node(id: u64) -> SemanticNode {
+        SemanticNode {
+            id: SemanticNodeId(id),
+            role: AccessibilityRole::Generic,
+            label: format!("node_{id}"),
+            description: String::new(),
+            state: AccessibilityState::empty(),
+            bounds: [0.0, 0.0, 100.0, 100.0],
+            children: Vec::new(),
+            parent: None,
+            z_depth: 0.0,
+        }
+    }
+
+    fn make_node_with_children(id: u64, children: Vec<SemanticNodeId>) -> SemanticNode {
+        let mut node = make_node(id);
+        node.children = children;
+        node
+    }
+
+    fn make_node_with_state(id: u64, state: AccessibilityState) -> SemanticNode {
+        let mut node = make_node(id);
+        node.state = state;
+        node
+    }
+
+    fn make_node_with_role(id: u64, role: AccessibilityRole) -> SemanticNode {
+        let mut node = make_node(id);
+        node.role = role;
+        node
+    }
+
+    fn build_three_node_ir() -> SemanticIR {
+        let mut ir = SemanticIR::new();
+        let c1 = SemanticNodeId(2);
+        let c2 = SemanticNodeId(3);
+        ir.add_node(make_node_with_children(1, vec![c1, c2]));
+        ir.add_node(make_node(2));
+        ir.add_node(make_node(3));
+        ir
+    }
+
+    #[test]
+    fn new_creates_empty_traversal() {
+        let ft = FocusTraversal::new();
+        assert!(ft.current_focus().is_none());
+        assert!(ft.focus_order.is_empty());
+    }
+
+    #[test]
+    fn compute_focus_order_three_nodes() {
+        let ir = build_three_node_ir();
+        let mut ft = FocusTraversal::new();
+        ft.compute_focus_order(&ir);
+        assert_eq!(ft.focus_order.len(), 3);
+        assert_eq!(ft.focus_order[0], SemanticNodeId(1));
+        assert_eq!(ft.focus_order[1], SemanticNodeId(2));
+        assert_eq!(ft.focus_order[2], SemanticNodeId(3));
+    }
+
+    #[test]
+    fn move_first() {
+        let ir = build_three_node_ir();
+        let mut ft = FocusTraversal::new();
+        ft.compute_focus_order(&ir);
+        let result = ft.move_focus(FocusDirection::First, &ir);
+        assert!(result.is_some());
+        assert_eq!(ft.current_focus(), Some(SemanticNodeId(1)));
+    }
+
+    #[test]
+    fn move_last() {
+        let ir = build_three_node_ir();
+        let mut ft = FocusTraversal::new();
+        ft.compute_focus_order(&ir);
+        let result = ft.move_focus(FocusDirection::Last, &ir);
+        assert!(result.is_some());
+        assert_eq!(ft.current_focus(), Some(SemanticNodeId(3)));
+    }
+
+    #[test]
+    fn move_forward_advances() {
+        let ir = build_three_node_ir();
+        let mut ft = FocusTraversal::new();
+        ft.compute_focus_order(&ir);
+        ft.move_focus(FocusDirection::First, &ir);
+        ft.move_focus(FocusDirection::Forward, &ir);
+        assert_eq!(ft.current_focus(), Some(SemanticNodeId(2)));
+    }
+
+    #[test]
+    fn move_forward_wraps_around() {
+        let ir = build_three_node_ir();
+        let mut ft = FocusTraversal::new();
+        ft.compute_focus_order(&ir);
+        ft.move_focus(FocusDirection::Last, &ir);
+        assert_eq!(ft.current_focus(), Some(SemanticNodeId(3)));
+        ft.move_focus(FocusDirection::Forward, &ir);
+        assert_eq!(ft.current_focus(), Some(SemanticNodeId(1)));
+    }
+
+    #[test]
+    fn move_backward_goes_to_previous() {
+        let ir = build_three_node_ir();
+        let mut ft = FocusTraversal::new();
+        ft.compute_focus_order(&ir);
+        ft.move_focus(FocusDirection::First, &ir);
+        ft.move_focus(FocusDirection::Forward, &ir);
+        ft.move_focus(FocusDirection::Forward, &ir);
+        assert_eq!(ft.current_focus(), Some(SemanticNodeId(3)));
+        ft.move_focus(FocusDirection::Backward, &ir);
+        assert_eq!(ft.current_focus(), Some(SemanticNodeId(2)));
+    }
+
+    #[test]
+    fn move_backward_wraps_around() {
+        let ir = build_three_node_ir();
+        let mut ft = FocusTraversal::new();
+        ft.compute_focus_order(&ir);
+        ft.move_focus(FocusDirection::First, &ir);
+        assert_eq!(ft.current_focus(), Some(SemanticNodeId(1)));
+        ft.move_focus(FocusDirection::Backward, &ir);
+        assert_eq!(ft.current_focus(), Some(SemanticNodeId(3)));
+    }
+
+    #[test]
+    fn clear_focus() {
+        let ir = build_three_node_ir();
+        let mut ft = FocusTraversal::new();
+        ft.compute_focus_order(&ir);
+        ft.move_focus(FocusDirection::First, &ir);
+        assert!(ft.current_focus().is_some());
+        ft.clear_focus();
+        assert!(ft.current_focus().is_none());
+    }
+
+    #[test]
+    fn set_focus_directly() {
+        let mut ft = FocusTraversal::new();
+        ft.set_focus(SemanticNodeId(42));
+        assert_eq!(ft.current_focus(), Some(SemanticNodeId(42)));
+    }
+
+    #[test]
+    fn empty_focus_order_move_returns_none() {
+        let ir = SemanticIR::new();
+        let mut ft = FocusTraversal::new();
+        let result = ft.move_focus(FocusDirection::Forward, &ir);
+        assert!(result.is_none());
+        assert!(ft.current_focus().is_none());
+    }
+
+    #[test]
+    fn hidden_nodes_excluded_from_focus_order() {
+        let mut ir = SemanticIR::new();
+        let c1 = SemanticNodeId(2);
+        let c2 = SemanticNodeId(3);
+        ir.add_node(make_node_with_children(1, vec![c1, c2]));
+        ir.add_node(make_node(2));
+        ir.add_node(make_node_with_state(3, AccessibilityState::HIDDEN));
+
+        let mut ft = FocusTraversal::new();
+        ft.compute_focus_order(&ir);
+        assert_eq!(ft.focus_order.len(), 2);
+        assert!(!ft.focus_order.contains(&SemanticNodeId(3)));
+    }
+
+    #[test]
+    fn separator_nodes_excluded_from_focus_order() {
+        let mut ir = SemanticIR::new();
+        let c1 = SemanticNodeId(2);
+        let c2 = SemanticNodeId(3);
+        ir.add_node(make_node_with_children(1, vec![c1, c2]));
+        ir.add_node(make_node(2));
+        ir.add_node(make_node_with_role(3, AccessibilityRole::Separator));
+
+        let mut ft = FocusTraversal::new();
+        ft.compute_focus_order(&ir);
+        assert_eq!(ft.focus_order.len(), 2);
+        assert!(!ft.focus_order.contains(&SemanticNodeId(3)));
     }
 }

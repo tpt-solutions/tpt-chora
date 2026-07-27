@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct ViewportGuard {
     bounds: [f32; 4],
     scissor_enabled: bool,
@@ -70,7 +71,7 @@ impl ViewportGuard {
 
         let compare = wgpu::CompareFunction::Equal;
         let pass_op = wgpu::StencilOperation::Keep;
-        let read_mask = (stencil_value | 0xFF).min(0xFF) as u32;
+        let read_mask = stencil_value.min(0xFF);
         let write_mask = 0xFFu32;
 
         Some(wgpu::DepthStencilState {
@@ -101,5 +102,85 @@ impl ViewportGuard {
         if self.stencil_enabled {
             pass.set_stencil_reference(stencil_value);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn point_inside() {
+        let vp = ViewportGuard::new(10.0, 20.0, 100.0, 80.0);
+        assert!(vp.is_point_inside(10.0, 20.0));
+        assert!(vp.is_point_inside(55.0, 50.0));
+        assert!(vp.is_point_inside(110.0, 100.0));
+    }
+
+    #[test]
+    fn point_outside() {
+        let vp = ViewportGuard::new(10.0, 20.0, 100.0, 80.0);
+        assert!(!vp.is_point_inside(0.0, 50.0));
+        assert!(!vp.is_point_inside(50.0, 0.0));
+        assert!(!vp.is_point_inside(200.0, 200.0));
+    }
+
+    #[test]
+    fn intersects_overlapping() {
+        let a = ViewportGuard::new(0.0, 0.0, 100.0, 100.0);
+        let b = ViewportGuard::new(50.0, 50.0, 100.0, 100.0);
+        assert!(a.intersects(&b));
+        assert!(b.intersects(&a));
+    }
+
+    #[test]
+    fn intersects_non_overlapping() {
+        let a = ViewportGuard::new(0.0, 0.0, 10.0, 10.0);
+        let b = ViewportGuard::new(100.0, 100.0, 10.0, 10.0);
+        assert!(!a.intersects(&b));
+        assert!(!b.intersects(&a));
+    }
+
+    #[test]
+    fn intersects_touching_edge_not_intersecting() {
+        let a = ViewportGuard::new(0.0, 0.0, 10.0, 10.0);
+        let b = ViewportGuard::new(10.0, 0.0, 10.0, 10.0);
+        assert!(!a.intersects(&b));
+    }
+
+    #[test]
+    fn to_scissor_rect() {
+        let vp = ViewportGuard::new(10.0, 20.0, 30.0, 40.0);
+        let rect = vp.to_scissor_rect(100.0);
+        assert_eq!(rect, [10, 40, 30, 40]);
+    }
+
+    #[test]
+    fn to_scissor_rect_clamp_negative() {
+        let vp = ViewportGuard::from_bounds([-5.0, -10.0, 5.0, 10.0]);
+        let rect = vp.to_scissor_rect(50.0);
+        assert_eq!(rect, [0, 40, 10, 20]);
+    }
+
+    #[test]
+    fn stencil_enabled_by_default() {
+        let vp = ViewportGuard::new(0.0, 0.0, 100.0, 100.0);
+        let _ = vp.to_scissor_rect(100.0);
+        let b = ViewportGuard::from_bounds([0.0, 0.0, 100.0, 100.0]);
+        assert_eq!(vp.bounds(), b.bounds());
+    }
+
+    #[test]
+    fn set_scissor_state() {
+        let mut vp = ViewportGuard::new(0.0, 0.0, 100.0, 100.0);
+        vp.set_scissor_state(false);
+        let _ = &vp;
+    }
+
+    #[test]
+    fn from_bounds_same_as_new() {
+        let a = ViewportGuard::new(10.0, 20.0, 30.0, 40.0);
+        let b = ViewportGuard::from_bounds([10.0, 20.0, 40.0, 60.0]);
+        assert_eq!(a.bounds(), b.bounds());
     }
 }

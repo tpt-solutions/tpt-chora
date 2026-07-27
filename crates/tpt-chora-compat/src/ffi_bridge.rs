@@ -132,3 +132,9 @@ impl FfiBridge {
         &self.modules
     }
 }
+
+impl Default for FfiBridge {
+    fn default() -> Self {
+        Self::new()
+    }
+}

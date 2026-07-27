@@ -139,6 +139,12 @@ impl GpuHitTest {
     }
 }
 
+impl Default for GpuHitTest {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BoundingBoxHierarchy {
     pub fn new() -> Self {
         Self {
@@ -169,7 +175,7 @@ impl BoundingBoxHierarchy {
         indices.sort_by(|&a, &b| {
             let center_a = (self.nodes[a].bounds[0] + self.nodes[a].bounds[2]) * 0.5;
             let center_b = (self.nodes[b].bounds[0] + self.nodes[b].bounds[2]) * 0.5;
-            center_a.partial_cmp(&center_b).unwrap()
+            center_a.total_cmp(&center_b)
         });
 
         self.root = Some(self.build_subtree(&indices));
@@ -327,6 +333,12 @@ impl BoundingBoxHierarchy {
     }
 }
 
+impl Default for BoundingBoxHierarchy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn point_in_bounds(x: f32, y: f32, bounds: &[f32; 4]) -> bool {
     x >= bounds[0] && x <= bounds[2] && y >= bounds[1] && y <= bounds[3]
 }
@@ -339,4 +351,156 @@ fn point_to_bounds_dist(x: f32, y: f32, bounds: &[f32; 4]) -> f32 {
     let clamped_x = x.clamp(bounds[0], bounds[2]);
     let clamped_y = y.clamp(bounds[1], bounds[3]);
     ((x - clamped_x).powi(2) + (y - clamped_y).powi(2)).sqrt()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_bvh_node_count_and_query() {
+        let bvh = BoundingBoxHierarchy::new();
+        assert_eq!(bvh.node_count(), 0);
+        assert!(bvh.root.is_none());
+        assert!(bvh.query_point(5.0, 5.0).is_none());
+    }
+
+    #[test]
+    fn single_node_insert() {
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 10.0, 10.0], 1);
+        assert_eq!(bvh.node_count(), 1);
+        assert_eq!(bvh.root, Some(0));
+    }
+
+    #[test]
+    fn build_tree_two_nodes() {
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 5.0, 5.0], 1);
+        bvh.insert([6.0, 6.0, 10.0, 10.0], 2);
+        bvh.build_tree();
+        assert_eq!(bvh.node_count(), 3);
+    }
+
+    #[test]
+    fn build_tree_four_nodes() {
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 2.0, 2.0], 1);
+        bvh.insert([3.0, 0.0, 5.0, 2.0], 2);
+        bvh.insert([0.0, 3.0, 2.0, 5.0], 3);
+        bvh.insert([3.0, 3.0, 5.0, 5.0], 4);
+        bvh.build_tree();
+        assert_eq!(bvh.node_count(), 7);
+    }
+
+    #[test]
+    fn build_tree_single_node_noop() {
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 10.0, 10.0], 42);
+        bvh.build_tree();
+        assert_eq!(bvh.node_count(), 1);
+    }
+
+    #[test]
+    fn query_point_hit() {
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 10.0, 10.0], 42);
+        bvh.build_tree();
+        let result = bvh.query_point(5.0, 5.0).unwrap();
+        assert_eq!(result.node_id, 42);
+        assert_eq!(result.bounding_box, [0.0, 0.0, 10.0, 10.0]);
+        assert!(result.depth >= 0.0);
+    }
+
+    #[test]
+    fn query_point_miss() {
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 10.0, 10.0], 42);
+        bvh.build_tree();
+        assert!(bvh.query_point(20.0, 20.0).is_none());
+    }
+
+    #[test]
+    fn query_point_closest_overlapping() {
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 20.0, 20.0], 1);
+        bvh.insert([2.0, 2.0, 8.0, 8.0], 2);
+        bvh.build_tree();
+        let result = bvh.query_point(4.0, 4.0).unwrap();
+        assert_eq!(result.node_id, 2);
+    }
+
+    #[test]
+    fn query_region_single_hit() {
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 10.0, 10.0], 1);
+        bvh.insert([20.0, 20.0, 30.0, 30.0], 2);
+        bvh.build_tree();
+        let results = bvh.query_region([2.0, 2.0, 8.0, 8.0]);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].node_id, 1);
+    }
+
+    #[test]
+    fn query_region_multiple_hits() {
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 10.0, 10.0], 1);
+        bvh.insert([5.0, 5.0, 15.0, 15.0], 2);
+        bvh.insert([20.0, 20.0, 30.0, 30.0], 3);
+        bvh.build_tree();
+        let results = bvh.query_region([0.0, 0.0, 12.0, 12.0]);
+        assert_eq!(results.len(), 2);
+        let ids: Vec<u64> = results.iter().map(|r| r.node_id).collect();
+        assert!(ids.contains(&1));
+        assert!(ids.contains(&2));
+    }
+
+    #[test]
+    fn query_region_no_hits() {
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 10.0, 10.0], 1);
+        bvh.insert([20.0, 20.0, 30.0, 30.0], 2);
+        bvh.build_tree();
+        let results = bvh.query_region([50.0, 50.0, 60.0, 60.0]);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn flatten_returns_only_leaves() {
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 5.0, 5.0], 10);
+        bvh.insert([6.0, 6.0, 11.0, 11.0], 20);
+        bvh.insert([12.0, 12.0, 17.0, 17.0], 30);
+        bvh.build_tree();
+        let flat = bvh.flatten();
+        assert_eq!(flat.len(), 3);
+        let ids: Vec<u64> = flat.iter().map(|(_, _, id)| *id).collect();
+        assert!(ids.contains(&10));
+        assert!(ids.contains(&20));
+        assert!(ids.contains(&30));
+        for (idx, bounds, _) in &flat {
+            assert_eq!(*idx, *idx);
+            assert!(bounds[2] > bounds[0]);
+            assert!(bounds[3] > bounds[1]);
+        }
+    }
+
+    #[test]
+    fn gpu_hit_test_2d_hit() {
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 10.0, 10.0], 99);
+        bvh.build_tree();
+        let gpu = GpuHitTest::new();
+        let result = gpu.hit_test_2d(3.0, 3.0, &bvh).unwrap();
+        assert_eq!(result.node_id, 99);
+    }
+
+    #[test]
+    fn gpu_hit_test_2d_miss() {
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 10.0, 10.0], 99);
+        bvh.build_tree();
+        let gpu = GpuHitTest::new();
+        assert!(gpu.hit_test_2d(50.0, 50.0, &bvh).is_none());
+    }
 }

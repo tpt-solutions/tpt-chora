@@ -1463,6 +1463,7 @@ name = "tpt-chora-compat"
 version = "0.1.0"
 dependencies = [
  "thiserror",
+ "tpt-chora-render",
 ]
 
 [[package]]
@@ -1470,7 +1471,7 @@ name = "tpt-chora-fallback"
 version = "0.1.0"
 dependencies = [
  "image",
- "png 0.18.1",
+ "png 0.17.16",
  "thiserror",
  "tpt-chora-render",
  "wgpu",
@@ -1518,6 +1519,7 @@ dependencies = [
  "png 0.17.16",
  "pollster",
  "thiserror",
+ "tpt-chora-spatial",
  "wgpu",
 ]
 
@@ -1528,6 +1530,7 @@ dependencies = [
  "bytemuck",
  "glam",
  "thiserror",
+ "tpt-chora-a11y",
  "tpt-chora-render",
  "wgpu",
 ]

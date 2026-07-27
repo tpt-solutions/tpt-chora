@@ -18,6 +18,12 @@ bytemuck = { version = "1.14", features = ["derive"] }
 pollster = "0.3"
 thiserror = "1.0"
 bitflags = "2.4"
+tpt-chora-spatial = { workspace = true, optional = true }
+
+[features]
+default = []
+spatial = ["dep:tpt-chora-spatial"]
 
 [dev-dependencies]
 png = "0.17"
+proptest = "1.5"

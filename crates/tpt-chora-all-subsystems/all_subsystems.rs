@@ -25,6 +25,18 @@ use tpt_chora_spatial::foveated::FoveatedRenderer;
 use tpt_chora_spatial::spatial_audio::SpatialAudioEngine;
 use tpt_chora_spatial::stereoscopic::StereoscopicRenderer;
 
+fn make_visual_node(
+    transform: glam::Mat4,
+    geometry: GpuMeshHandle,
+    material: GpuMaterialHandle,
+    clip_mask: GpuTextureHandle,
+    z_depth: f32,
+    bounds: [f32; 4],
+) -> ChoraVisualNode {
+    ChoraVisualNode::new(transform, geometry, material, clip_mask, bounds)
+        .with_z_depth_raw(z_depth)
+}
+
 fn main() {
     println!("=== tpt-chora Full End-to-End Demo ===\n");
 
@@ -195,26 +207,24 @@ fn main() {
     println!("\n[Phase 7] Integration Contracts (TPT Trinity)");
     let _runtime = ChoraRuntime::new();
     let mut visual_tree = ChoraVisualTree::new();
-    let root_idx = visual_tree.add_node(ChoraVisualNode {
-        transform: glam::Mat4::IDENTITY,
-        geometry: GpuMeshHandle(0),
-        material: GpuMaterialHandle(0),
-        clip_mask: GpuTextureHandle(0),
-        z_depth: 0.0,
-        bounds: [0.0, 0.0, 800.0, 600.0],
-        visible: true,
-    });
+    let root_idx = visual_tree.add_node(make_visual_node(
+        glam::Mat4::IDENTITY,
+        GpuMeshHandle(0),
+        GpuMaterialHandle(0),
+        GpuTextureHandle(0),
+        0.0,
+        [0.0, 0.0, 800.0, 600.0],
+    ));
     let _child_idx = visual_tree.add_child(
         root_idx,
-        ChoraVisualNode {
-            transform: glam::Mat4::from_translation(glam::Vec3::new(100.0, 100.0, 0.0)),
-            geometry: GpuMeshHandle(1),
-            material: GpuMaterialHandle(1),
-            clip_mask: GpuTextureHandle(0),
-            z_depth: 0.1,
-            bounds: [100.0, 100.0, 300.0, 200.0],
-            visible: true,
-        },
+        make_visual_node(
+            glam::Mat4::from_translation(glam::Vec3::new(100.0, 100.0, 0.0)),
+            GpuMeshHandle(1),
+            GpuMaterialHandle(1),
+            GpuTextureHandle(0),
+            0.1,
+            [100.0, 100.0, 300.0, 200.0],
+        ),
     );
     println!(
         "  Visual tree: {} nodes, root={}, children={}",

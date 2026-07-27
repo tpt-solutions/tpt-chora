@@ -1,4 +1,7 @@
 use glam::Mat4;
+pub use tpt_chora_a11y::semantic::AccessibilityRole;
+pub use tpt_chora_render::HierarchicalZDepth;
+pub use tpt_chora_render::ZDepthViolation;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GpuMeshHandle(pub u64);
@@ -15,9 +18,49 @@ pub struct ChoraVisualNode {
     pub geometry: GpuMeshHandle,
     pub material: GpuMaterialHandle,
     pub clip_mask: GpuTextureHandle,
-    pub z_depth: f32,
+    z_depth: f32,
     pub bounds: [f32; 4],
     pub visible: bool,
+}
+
+impl ChoraVisualNode {
+    pub fn new(
+        transform: Mat4,
+        geometry: GpuMeshHandle,
+        material: GpuMaterialHandle,
+        clip_mask: GpuTextureHandle,
+        bounds: [f32; 4],
+    ) -> Self {
+        Self {
+            transform,
+            geometry,
+            material,
+            clip_mask,
+            z_depth: 0.0,
+            bounds,
+            visible: true,
+        }
+    }
+
+    pub fn z_depth(&self) -> f32 {
+        self.z_depth
+    }
+
+    pub fn set_z_depth(
+        &mut self,
+        z_depth_system: &HierarchicalZDepth,
+        parent_z: f32,
+        sibling_index: u32,
+        has_modal_capability: bool,
+    ) -> Result<(), ZDepthViolation> {
+        self.z_depth = z_depth_system.compute_z(parent_z, sibling_index, has_modal_capability)?;
+        Ok(())
+    }
+
+    pub fn with_z_depth_raw(mut self, z: f32) -> Self {
+        self.z_depth = z;
+        self
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -27,21 +70,6 @@ pub struct ChoraSemanticNode {
     pub state: u32,
     pub bounding_box_2d: [f32; 4],
     pub children: Vec<u64>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum AccessibilityRole {
-    Button,
-    Link,
-    Heading,
-    Text,
-    Image,
-    TextField,
-    TextArea,
-    CheckBox,
-    RadioButton,
-    Slider,
-    Generic,
 }
 
 pub struct ChoraVisualTree {
@@ -101,10 +129,16 @@ impl ChoraVisualTree {
 
     pub fn sort_by_z_depth(&mut self) {
         self.nodes.sort_by(|a, b| {
-            a.z_depth
-                .partial_cmp(&b.z_depth)
+            a.z_depth()
+                .partial_cmp(&b.z_depth())
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+    }
+}
+
+impl Default for ChoraVisualTree {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -163,5 +197,123 @@ impl ChoraSemanticTree {
 
     pub fn node_count(&self) -> usize {
         self.nodes.len()
+    }
+}
+
+impl Default for ChoraSemanticTree {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn visual_node(z: f32) -> ChoraVisualNode {
+        ChoraVisualNode::new(
+            Mat4::IDENTITY,
+            GpuMeshHandle(0),
+            GpuMaterialHandle(0),
+            GpuTextureHandle(0),
+            [0.0; 4],
+        )
+        .with_z_depth_raw(z)
+    }
+
+    fn semantic_node(label: u64) -> ChoraSemanticNode {
+        ChoraSemanticNode {
+            role: AccessibilityRole::Button,
+            label,
+            state: 0,
+            bounding_box_2d: [0.0; 4],
+            children: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn visual_tree_new_empty() {
+        let t = ChoraVisualTree::new();
+        assert!(t.nodes().is_empty());
+        assert_eq!(t.root(), None);
+    }
+
+    #[test]
+    fn visual_tree_add_node() {
+        let mut t = ChoraVisualTree::new();
+        let idx = t.add_node(visual_node(0.0));
+        assert_eq!(idx, 0);
+        assert_eq!(t.nodes().len(), 1);
+        assert_eq!(t.root(), Some(0));
+    }
+
+    #[test]
+    fn visual_tree_add_child() {
+        let mut t = ChoraVisualTree::new();
+        let parent = t.add_node(visual_node(0.0));
+        let child = t.add_child(parent, visual_node(1.0));
+        assert_eq!(t.get_children(parent), &[child]);
+    }
+
+    #[test]
+    fn visual_tree_parent() {
+        let mut t = ChoraVisualTree::new();
+        let parent = t.add_node(visual_node(0.0));
+        let child = t.add_child(parent, visual_node(1.0));
+        assert_eq!(t.parent(child), Some(parent));
+    }
+
+    #[test]
+    fn visual_tree_set_root() {
+        let mut t = ChoraVisualTree::new();
+        t.add_node(visual_node(0.0));
+        let second = t.add_node(visual_node(1.0));
+        t.set_root(second);
+        assert_eq!(t.root(), Some(second));
+    }
+
+    #[test]
+    fn visual_tree_sort_by_z_depth() {
+        let mut t = ChoraVisualTree::new();
+        t.add_node(visual_node(2.0));
+        t.add_node(visual_node(1.0));
+        t.add_node(visual_node(3.0));
+        t.sort_by_z_depth();
+        let depths: Vec<f32> = t.nodes().iter().map(|n| n.z_depth()).collect();
+        assert_eq!(depths, vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn semantic_tree_new_empty() {
+        let t = ChoraSemanticTree::new();
+        assert_eq!(t.node_count(), 0);
+        assert_eq!(t.root(), None);
+    }
+
+    #[test]
+    fn semantic_tree_add_node() {
+        let mut t = ChoraSemanticTree::new();
+        let idx = t.add_node(semantic_node(42));
+        assert_eq!(idx, 0);
+        assert_eq!(t.node_count(), 1);
+        assert_eq!(t.root(), Some(0));
+    }
+
+    #[test]
+    fn semantic_tree_get_children() {
+        let mut t = ChoraSemanticTree::new();
+        let parent = t.add_node(semantic_node(10));
+        let child = t.add_child(parent, semantic_node(20));
+        let children = t.get_children(parent);
+        assert_eq!(children, &[20]);
+        assert_eq!(child, 1);
+    }
+
+    #[test]
+    fn semantic_tree_parent() {
+        let mut t = ChoraSemanticTree::new();
+        let parent = t.add_node(semantic_node(10));
+        let child = t.add_child(parent, semantic_node(20));
+        assert_eq!(t.parent(child), Some(10));
     }
 }

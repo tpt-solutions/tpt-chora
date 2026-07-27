@@ -1,5 +1,5 @@
 pub struct CssParser {
-    input: String,
+    chars: Vec<char>,
     position: usize,
     line: u32,
 }
@@ -25,7 +25,7 @@ pub struct CssDeclaration {
 impl CssParser {
     pub fn new(input: String) -> Self {
         Self {
-            input,
+            chars: input.chars().collect(),
             position: 0,
             line: 1,
         }
@@ -34,9 +34,9 @@ impl CssParser {
     pub fn parse(&mut self) -> Result<ParsedCss, crate::CompatError> {
         let mut rules = Vec::new();
 
-        while self.position < self.input.len() {
+        while self.position < self.chars.len() {
             self.skip_whitespace();
-            if self.position >= self.input.len() {
+            if self.position >= self.chars.len() {
                 break;
             }
 
@@ -63,7 +63,7 @@ impl CssParser {
         self.position += 1;
 
         let mut declarations = Vec::new();
-        while self.position < self.input.len() && self.peek() != '}' {
+        while self.position < self.chars.len() && self.peek() != '}' {
             self.skip_whitespace();
             if self.peek() == '}' {
                 break;
@@ -75,7 +75,7 @@ impl CssParser {
             self.skip_whitespace();
         }
 
-        if self.position < self.input.len() {
+        if self.position < self.chars.len() {
             self.position += 1;
         }
 
@@ -91,7 +91,7 @@ impl CssParser {
         self.skip_whitespace();
 
         let value = self.read_until(';')?.trim().to_string();
-        if self.position < self.input.len() {
+        if self.position < self.chars.len() {
             self.position += 1;
         }
 
@@ -113,35 +113,27 @@ impl CssParser {
         }))
     }
 
-    fn read_until(&mut self, char: char) -> Result<String, crate::CompatError> {
+    fn read_until(&mut self, target: char) -> Result<String, crate::CompatError> {
         let start = self.position;
-        while self.position < self.input.len() && self.peek() != char {
+        while self.position < self.chars.len() && self.peek() != target {
             if self.peek() == '\n' {
                 self.line += 1;
             }
             self.position += 1;
         }
-        Ok(self.input[start..self.position].to_string())
+        Ok(self.chars[start..self.position].iter().collect())
     }
 
     fn peek(&self) -> char {
-        self.input
-            .as_bytes()
-            .get(self.position)
-            .copied()
-            .unwrap_or(b' ') as char
+        self.chars.get(self.position).copied().unwrap_or(' ')
     }
 
     fn peek_next(&self) -> Option<char> {
-        self.input
-            .as_bytes()
-            .get(self.position + 1)
-            .copied()
-            .map(|b| b as char)
+        self.chars.get(self.position + 1).copied()
     }
 
     fn skip_whitespace(&mut self) {
-        while self.position < self.input.len() {
+        while self.position < self.chars.len() {
             match self.peek() {
                 ' ' | '\t' | '\r' | '\n' => {
                     if self.peek() == '\n' {
@@ -156,7 +148,7 @@ impl CssParser {
 
     fn skip_comment(&mut self) {
         self.position += 2;
-        while self.position < self.input.len() - 1 {
+        while self.position + 1 < self.chars.len() {
             if self.peek() == '*' && self.peek_next() == Some('/') {
                 self.position += 2;
                 return;
@@ -169,13 +161,13 @@ impl CssParser {
     }
 
     fn skip_at_rule(&mut self) {
-        while self.position < self.input.len() && self.peek() != '{' && self.peek() != ';' {
+        while self.position < self.chars.len() && self.peek() != '{' && self.peek() != ';' {
             self.position += 1;
         }
-        if self.position < self.input.len() && self.peek() == '{' {
+        if self.position < self.chars.len() && self.peek() == '{' {
             let mut depth = 1;
             self.position += 1;
-            while self.position < self.input.len() && depth > 0 {
+            while self.position < self.chars.len() && depth > 0 {
                 match self.peek() {
                     '{' => depth += 1,
                     '}' => depth -= 1,
@@ -183,8 +175,46 @@ impl CssParser {
                 }
                 self.position += 1;
             }
-        } else if self.position < self.input.len() {
+        } else if self.position < self.chars.len() {
             self.position += 1;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_ascii_rules() {
+        let mut parser = CssParser::new(".btn { color: red; }".into());
+        let css = parser.parse().unwrap();
+        assert_eq!(css.rules.len(), 1);
+        assert_eq!(css.rules[0].selector, ".btn");
+        assert_eq!(css.rules[0].declarations[0].property, "color");
+        assert_eq!(css.rules[0].declarations[0].value, "red");
+    }
+
+    #[test]
+    fn parse_non_ascii_input() {
+        let mut parser = CssParser::new(".btn { color: r\u{00E9}d; }".into());
+        let css = parser.parse().unwrap();
+        assert_eq!(css.rules.len(), 1);
+        assert_eq!(css.rules[0].declarations[0].value, "r\u{00E9}d");
+    }
+
+    #[test]
+    fn parse_cjk_selectors() {
+        let mut parser = CssParser::new("\u{4E00}\u{5185}\u{5BB9} { font-size: 16px; }".into());
+        let css = parser.parse().unwrap();
+        assert_eq!(css.rules.len(), 1);
+        assert_eq!(css.rules[0].selector, "\u{4E00}\u{5185}\u{5BB9}");
+    }
+
+    #[test]
+    fn parse_emoji_in_value() {
+        let mut parser = CssParser::new(".icon { content: \"\u{1F600}\"; }".into());
+        let css = parser.parse().unwrap();
+        assert_eq!(css.rules[0].declarations[0].value, "\"\u{1F600}\"");
     }
 }

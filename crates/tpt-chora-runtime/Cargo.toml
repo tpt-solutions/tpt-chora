@@ -14,6 +14,7 @@ categories.workspace = true
 
 [dependencies]
 tpt-chora-render = { workspace = true }
+tpt-chora-a11y = { workspace = true }
 wgpu = "0.19"
 bytemuck = { version = "1.14", features = ["derive"] }
 thiserror = "1.0"

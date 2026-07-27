@@ -17,8 +17,8 @@ pub struct HeatmapCell {
 impl OverdrawHeatmap {
     pub fn new(width: u32, height: u32) -> Self {
         let cell_size = 8;
-        let cells_x = (width + cell_size - 1) / cell_size;
-        let cells_y = (height + cell_size - 1) / cell_size;
+        let cells_x = width.div_ceil(cell_size);
+        let cells_y = height.div_ceil(cell_size);
 
         Self {
             width,
@@ -35,7 +35,7 @@ impl OverdrawHeatmap {
         let min_y = y0.min(y1).min(y2) as u32;
         let max_y = (y0.max(y1).max(y2) as u32).min(self.height - 1);
 
-        let cells_x = (self.width + self.cell_size - 1) / self.cell_size;
+        let cells_x = self.width.div_ceil(self.cell_size);
 
         for y in (min_y..=max_y).step_by(self.cell_size as usize) {
             for x in (min_x..=max_x).step_by(self.cell_size as usize) {
@@ -56,7 +56,7 @@ impl OverdrawHeatmap {
     }
 
     pub fn get_cells(&self) -> Vec<HeatmapCell> {
-        let cells_x = (self.width + self.cell_size - 1) / self.cell_size;
+        let cells_x = self.width.div_ceil(self.cell_size);
         self.cells
             .iter()
             .enumerate()
@@ -75,8 +75,8 @@ impl OverdrawHeatmap {
     }
 
     pub fn to_rgba_texture_data(&self) -> Vec<u8> {
-        let cells_x = (self.width + self.cell_size - 1) / self.cell_size;
-        let _cells_y = (self.height + self.cell_size - 1) / self.cell_size;
+        let cells_x = self.width.div_ceil(self.cell_size);
+        let _cells_y = self.height.div_ceil(self.cell_size);
         let mut data = vec![0u8; (self.width * self.height * 4) as usize];
 
         for (i, &count) in self.cells.iter().enumerate() {

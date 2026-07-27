@@ -108,6 +108,7 @@ impl VolumetricLightPipeline {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn record(
         &self,
         device: &wgpu::Device,
@@ -154,8 +155,8 @@ impl VolumetricLightPipeline {
         });
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &bg, &[]);
-        let workgroups_x = (width + 7) / 8;
-        let workgroups_y = (height + 7) / 8;
+        let workgroups_x = width.div_ceil(8);
+        let workgroups_y = height.div_ceil(8);
         pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
     }
 }

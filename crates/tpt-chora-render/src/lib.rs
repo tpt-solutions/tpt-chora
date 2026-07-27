@@ -10,14 +10,22 @@
 //!   `Renderer`.
 
 pub mod error;
+pub mod framebuffer;
 pub mod graph;
 pub mod postprocess;
 pub mod renderer;
 pub mod security;
+#[cfg(feature = "spatial")]
+pub mod spatial;
 pub mod vector;
 
 pub use error::RenderError;
+pub use framebuffer::FrameBufferSet;
 pub use graph::{GraphNode, NodeExecuteCtx, RenderGraph, ResourceId, TransientTextureDesc};
 pub use postprocess::{ColorGradeParams, PostProcessPipeline};
 pub use renderer::{GpuContext, Renderer};
+pub use security::capability::{CapabilityGuard, CapabilityToken, ShaderAccessViolation};
+pub use security::viewport::ViewportGuard;
+pub use security::z_depth::{HierarchicalZDepth, ZDepthViolation};
+pub use security::SecurityContext;
 pub use vector::{circle_path, tessellate_cubics_gpu, CubicBezier};

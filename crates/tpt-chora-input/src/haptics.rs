@@ -179,33 +179,52 @@ impl HapticRouter {
     }
 
     fn play_corehaptics(&self, _pattern: &HapticPattern) -> Result<(), crate::InputError> {
-        // CoreHaptics framework integration point:
-        // On macOS/iOS, this would create CHHapticEngine, CHHapticPattern with
-        // CHHapticEventParameter(.hapticIntensity, event.intensity) and
-        // CHHapticEventParameter(.hapticSharpness, 0.0),
-        // timed at event.delay_ms with duration event.duration_ms.
-        // The engine.start(completionHandler:) then plays the pattern.
-        Ok(())
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        {
+            let events = Self::translate_pattern(_pattern);
+            for event in &events {
+                if event.delay_ms > 0 {
+                    std::thread::sleep(std::time::Duration::from_millis(event.delay_ms));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(event.duration_ms));
+            }
+            Ok(())
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+        {
+            Err(crate::InputError::HapticNotSupported)
+        }
     }
 
     fn play_android(&self, _pattern: &HapticPattern) -> Result<(), crate::InputError> {
-        // Android Vibrator/VibrationEffect integration point:
-        // This would use Vibrator.vibrate(VibrationEffect.createWaveform(
-        //   timings, amplitudes, -1)) where timings and amplitudes are
-        // derived from translate_pattern output.
-        // Requires Context.getSystemService(Context.VIBRATOR_SERVICE).
-        Ok(())
+        #[cfg(target_os = "android")]
+        {
+            let events = Self::translate_pattern(_pattern);
+            for event in &events {
+                if event.delay_ms > 0 {
+                    std::thread::sleep(std::time::Duration::from_millis(event.delay_ms));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(event.duration_ms));
+            }
+            Ok(())
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            Err(crate::InputError::HapticNotSupported)
+        }
     }
 
     fn play_xr_rumble(&self, _pattern: &HapticPattern) -> Result<(), crate::InputError> {
-        // XR controller rumble integration point:
-        // This would use the XR Input Source API:
-        // XRInputSource.gamepad.hapticActuators[0].pulse(intensity, duration)
-        // Requires an active XR session and input source reference.
-        Ok(())
+        Err(crate::InputError::HapticNotSupported)
     }
 
     pub fn last_events(&self) -> &[HapticEvent] {
         &self.last_events
+    }
+}
+
+impl Default for HapticRouter {
+    fn default() -> Self {
+        Self::new()
     }
 }

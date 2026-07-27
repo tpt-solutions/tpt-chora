@@ -23,7 +23,6 @@ fn volumetric_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     let uv = vec2<f32>(f32(gid.x) / f32(dims.x), f32(gid.y) / f32(dims.y));
     let scene_color = textureLoad(scene_tex, gid.xy, 0).rgb;
-    let depth = textureLoad(depth_tex, gid.xy, 0);
 
     let ray_origin = vec3<f32>(uv.x * 2.0 - 1.0, uv.y * 2.0 - 1.0, 0.0);
     let ray_dir = normalize(vec3<f32>(0.0, 0.0, 1.0));
@@ -37,6 +36,16 @@ fn volumetric_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
     for (var i = 0u; i < steps; i++) {
         let t = f32(i) / f32(steps);
         let sample_pos = ray_origin + ray_dir * t;
+
+        let sample_uv = vec2<f32>(
+            clamp(sample_pos.x * 0.5 + 0.5, 0.0, 1.0),
+            clamp(sample_pos.y * 0.5 + 0.5, 0.0, 1.0),
+        );
+        let sample_pixel = vec2<u32>(
+            u32(sample_uv.x * f32(dims.x)),
+            u32(sample_uv.y * f32(dims.y)),
+        );
+        let depth = textureLoad(depth_tex, sample_pixel, 0);
 
         let n_dot_l = max(dot(normalize(sample_pos), params.light_dir), 0.0);
         let phase = 0.25 * (1.0 + n_dot_l);

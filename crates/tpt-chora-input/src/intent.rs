@@ -150,3 +150,9 @@ impl IntentResolver {
         InteractionIntent::PanEnd
     }
 }
+
+impl Default for IntentResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}

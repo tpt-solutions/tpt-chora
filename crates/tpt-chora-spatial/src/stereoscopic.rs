@@ -155,6 +155,7 @@ impl StereoscopicRenderer {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_stereo_views(
         &self,
         camera_pos: Vec3,

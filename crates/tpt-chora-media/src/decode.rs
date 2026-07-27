@@ -1,5 +1,24 @@
 pub struct ImageDecoder;
 
+pub struct VideoDecoder {
+    backend: VideoDecodeBackend,
+}
+
+enum VideoDecodeBackend {
+    VaApi,
+    VideoToolbox,
+    MediaCodec,
+    SoftwareFallback,
+}
+
+pub struct VideoFrame {
+    pub width: u32,
+    pub height: u32,
+    pub data: Vec<u8>,
+    pub format: ImageFormat,
+    pub presentation_timestamp_us: u64,
+}
+
 pub struct DecodedImage {
     pub width: u32,
     pub height: u32,
@@ -54,9 +73,10 @@ impl ImageDecoder {
             Ok(ImageFormat::Rgba8)
         } else if data.starts_with(&[0xFF, 0xD8, 0xFF]) {
             Ok(ImageFormat::Rgb8)
-        } else if data.len() >= 12 && data[0..4] == [0x52, 0x49, 0x46, 0x46] {
-            Ok(ImageFormat::Rgba8)
-        } else if data.starts_with(b"VP8") || data.starts_with(b"VP8L") || data.starts_with(b"VP8X")
+        } else if (data.len() >= 12 && data[0..4] == [0x52, 0x49, 0x46, 0x46])
+            || data.starts_with(b"VP8")
+            || data.starts_with(b"VP8L")
+            || data.starts_with(b"VP8X")
         {
             Ok(ImageFormat::Rgba8)
         } else {
@@ -114,10 +134,16 @@ impl ImageDecoder {
     }
 }
 
+impl Default for ImageDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn f16_from_f32(val: f32) -> u16 {
     let bits = val.to_bits();
     let sign = (bits >> 16) as u16 & 0x8000;
-    let exp = ((bits >> 23) as i32 - 127 + 15).max(0).min(31) as u16;
+    let exp = ((bits >> 23) as i32 - 127 + 15).clamp(0, 31) as u16;
     let mantissa = ((bits >> 13) & 0x3FF) as u16;
 
     if exp == 0 && mantissa == 0 {
@@ -126,5 +152,55 @@ fn f16_from_f32(val: f32) -> u16 {
         sign | 0x7C00 | mantissa
     } else {
         sign | (exp << 10) | mantissa
+    }
+}
+
+impl VideoDecoder {
+    pub fn new() -> Self {
+        let backend = if cfg!(target_os = "linux") {
+            VideoDecodeBackend::VaApi
+        } else if cfg!(target_os = "macos") || cfg!(target_os = "ios") {
+            VideoDecodeBackend::VideoToolbox
+        } else if cfg!(target_os = "android") {
+            VideoDecodeBackend::MediaCodec
+        } else {
+            VideoDecodeBackend::SoftwareFallback
+        };
+        Self { backend }
+    }
+
+    pub fn decode_frame(
+        &self,
+        _encoded_data: &[u8],
+    ) -> Result<VideoFrame, crate::MediaError> {
+        match &self.backend {
+            VideoDecodeBackend::VaApi => {
+                Err(crate::MediaError::VideoDecodeUnavailable)
+            }
+            VideoDecodeBackend::VideoToolbox => {
+                Err(crate::MediaError::VideoDecodeUnavailable)
+            }
+            VideoDecodeBackend::MediaCodec => {
+                Err(crate::MediaError::VideoDecodeUnavailable)
+            }
+            VideoDecodeBackend::SoftwareFallback => {
+                Err(crate::MediaError::VideoDecodeUnavailable)
+            }
+        }
+    }
+
+    pub fn backend_name(&self) -> &'static str {
+        match &self.backend {
+            VideoDecodeBackend::VaApi => "VA-API",
+            VideoDecodeBackend::VideoToolbox => "VideoToolbox",
+            VideoDecodeBackend::MediaCodec => "MediaCodec",
+            VideoDecodeBackend::SoftwareFallback => "software-fallback",
+        }
+    }
+}
+
+impl Default for VideoDecoder {
+    fn default() -> Self {
+        Self::new()
     }
 }

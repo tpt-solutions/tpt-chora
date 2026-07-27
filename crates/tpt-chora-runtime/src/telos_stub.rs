@@ -1,3 +1,13 @@
+pub trait TelosBackend {
+    fn process_event(
+        &mut self,
+        event: &TelosEvent,
+        proofs: &[EidosProof],
+    ) -> Option<StateMutation>;
+    fn transitions(&self) -> &[StateTransition];
+    fn transition_count(&self) -> usize;
+}
+
 pub struct TelosState {
     transitions: Vec<StateTransition>,
 }
@@ -122,6 +132,30 @@ impl TelosState {
 
     pub fn transition_count(&self) -> usize {
         self.transitions.len()
+    }
+}
+
+impl Default for TelosState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TelosBackend for TelosState {
+    fn process_event(
+        &mut self,
+        event: &TelosEvent,
+        proofs: &[EidosProof],
+    ) -> Option<StateMutation> {
+        TelosState::process_event(self, event, proofs)
+    }
+
+    fn transitions(&self) -> &[StateTransition] {
+        TelosState::transitions(self)
+    }
+
+    fn transition_count(&self) -> usize {
+        TelosState::transition_count(self)
     }
 }
 

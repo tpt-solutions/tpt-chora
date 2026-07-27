@@ -1,6 +1,6 @@
 [package]
-name = "tpt-chora-compat"
-description = "tpt-chora Migration & Adoption: HTML/CSS transpiler, Wasm/FFI interop, embeddable web component"
+name = "tpt-chora-cli"
+description = "tpt-chora Adoption Tooling: doctor diagnostics, project scaffolding, CSS compatibility reports"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,6 +12,14 @@ readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+[[bin]]
+name = "tpt-chora"
+path = "src/main.rs"
+
 [dependencies]
+clap = { version = "4.5", features = ["derive"] }
+wgpu = "0.19"
+pollster = "0.3"
 thiserror = "1.0"
 tpt-chora-render = { workspace = true }
+tpt-chora-compat = { workspace = true }

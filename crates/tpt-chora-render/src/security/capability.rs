@@ -14,6 +14,7 @@ bitflags::bitflags! {
     }
 }
 
+#[derive(Debug)]
 pub struct CapabilityGuard {
     owner_id: u64,
     allowed_tokens: CapabilityToken,
@@ -43,12 +44,34 @@ impl CapabilityGuard {
         self.allowed_tokens.contains(token)
     }
 
-    pub fn grant_texture(&mut self, texture_id: u64) {
+    pub fn grant_texture(
+        &mut self,
+        texture_id: u64,
+    ) -> Result<(), ShaderAccessViolation> {
+        if !self.has_token(CapabilityToken::TEXTURE_READ) {
+            return Err(ShaderAccessViolation::TextureDenied {
+                owner: self.owner_id,
+                texture: texture_id,
+            });
+        }
         self.granted_textures.insert(texture_id);
+        Ok(())
     }
 
-    pub fn grant_buffer(&mut self, buffer_id: u64) {
+    pub fn grant_buffer(
+        &mut self,
+        buffer_id: u64,
+    ) -> Result<(), ShaderAccessViolation> {
+        if !self.has_token(CapabilityToken::UNIFORM_READ)
+            && !self.has_token(CapabilityToken::STORAGE_READ)
+        {
+            return Err(ShaderAccessViolation::BufferDenied {
+                owner: self.owner_id,
+                buffer: buffer_id,
+            });
+        }
         self.granted_buffers.insert(buffer_id);
+        Ok(())
     }
 
     pub fn revoke_texture(&mut self, texture_id: u64) {
@@ -102,6 +125,189 @@ impl std::fmt::Display for ShaderAccessViolation {
             }
             Self::BufferDenied { owner, buffer } => {
                 write!(f, "component {} denied access to buffer {}", owner, buffer)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ShaderAccessViolation {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn guard() -> CapabilityGuard {
+        CapabilityGuard::new(
+            1,
+            CapabilityToken::TEXTURE_READ
+                | CapabilityToken::TEXTURE_WRITE
+                | CapabilityToken::STORAGE_READ,
+        )
+    }
+
+    #[test]
+    fn grant_and_revoke_texture() {
+        let mut g = guard();
+        assert!(!g.can_access_texture(42));
+        let _ = g.grant_texture(42);
+        assert!(g.can_access_texture(42));
+        g.revoke_texture(42);
+        assert!(!g.can_access_texture(42));
+    }
+
+    #[test]
+    fn grant_and_revoke_buffer() {
+        let mut g = guard();
+        assert!(!g.can_access_buffer(7));
+        let _ = g.grant_buffer(7);
+        assert!(g.can_access_buffer(7));
+        g.revoke_buffer(7);
+        assert!(!g.can_access_buffer(7));
+    }
+
+    #[test]
+    fn has_token() {
+        let g = guard();
+        assert!(g.has_token(CapabilityToken::TEXTURE_READ));
+        assert!(g.has_token(CapabilityToken::STORAGE_READ));
+        assert!(!g.has_token(CapabilityToken::MODAL));
+        assert!(!g.has_token(CapabilityToken::RENDER_TARGET));
+    }
+
+    #[test]
+    fn validate_shader_access_pass() {
+        let mut g = guard();
+        let _ = g.grant_texture(10);
+        let _ = g.grant_texture(20);
+        let _ = g.grant_buffer(30);
+
+        assert!(g.validate_shader_access(&[10, 20], &[30]).is_ok());
+    }
+
+    #[test]
+    fn validate_shader_access_texture_denied() {
+        let mut g = guard();
+        let _ = g.grant_buffer(30);
+
+        let err = g.validate_shader_access(&[10], &[30]).unwrap_err();
+        match err {
+            ShaderAccessViolation::TextureDenied { owner, texture } => {
+                assert_eq!(owner, 1);
+                assert_eq!(texture, 10);
+            }
+            _ => panic!("expected TextureDenied"),
+        }
+    }
+
+    #[test]
+    fn validate_shader_access_buffer_denied() {
+        let mut g = guard();
+        let _ = g.grant_texture(10);
+
+        let err = g.validate_shader_access(&[10], &[30]).unwrap_err();
+        match err {
+            ShaderAccessViolation::BufferDenied { owner, buffer } => {
+                assert_eq!(owner, 1);
+                assert_eq!(buffer, 30);
+            }
+            _ => panic!("expected BufferDenied"),
+        }
+    }
+
+    #[test]
+    fn shader_access_violation_is_error() {
+        let err: Box<dyn std::error::Error> = Box::new(ShaderAccessViolation::TextureDenied {
+            owner: 1,
+            texture: 2,
+        });
+        assert!(err.to_string().contains("denied access to texture"));
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn grant_texture_succeeds_when_token_present(id in 0u64..u64::MAX) {
+            let mut g = CapabilityGuard::new(0, CapabilityToken::TEXTURE_READ);
+            prop_assert!(g.grant_texture(id).is_ok());
+            prop_assert!(g.can_access_texture(id));
+        }
+
+        #[test]
+        fn grant_texture_fails_without_token(id in 0u64..u64::MAX) {
+            let mut g = CapabilityGuard::new(0, CapabilityToken::empty());
+            prop_assert!(g.grant_texture(id).is_err());
+            prop_assert!(!g.can_access_texture(id));
+        }
+
+        #[test]
+        fn grant_buffer_succeeds_with_uniform_read(id in 0u64..u64::MAX) {
+            let mut g = CapabilityGuard::new(0, CapabilityToken::UNIFORM_READ);
+            prop_assert!(g.grant_buffer(id).is_ok());
+            prop_assert!(g.can_access_buffer(id));
+        }
+
+        #[test]
+        fn grant_buffer_succeeds_with_storage_read(id in 0u64..u64::MAX) {
+            let mut g = CapabilityGuard::new(0, CapabilityToken::STORAGE_READ);
+            prop_assert!(g.grant_buffer(id).is_ok());
+            prop_assert!(g.can_access_buffer(id));
+        }
+
+        #[test]
+        fn grant_buffer_fails_without_any_read_token(id in 0u64..u64::MAX) {
+            let mut g = CapabilityGuard::new(0, CapabilityToken::empty());
+            prop_assert!(g.grant_buffer(id).is_err());
+            prop_assert!(!g.can_access_buffer(id));
+        }
+
+        #[test]
+        fn revoke_texture_removes_access(id in 0u64..u64::MAX) {
+            let mut g = CapabilityGuard::new(0, CapabilityToken::TEXTURE_READ);
+            let _ = g.grant_texture(id);
+            g.revoke_texture(id);
+            prop_assert!(!g.can_access_texture(id));
+        }
+
+        #[test]
+        fn revoke_buffer_removes_access(id in 0u64..u64::MAX) {
+            let mut g = CapabilityGuard::new(0, CapabilityToken::UNIFORM_READ);
+            let _ = g.grant_buffer(id);
+            g.revoke_buffer(id);
+            prop_assert!(!g.can_access_buffer(id));
+        }
+
+        #[test]
+        fn validate_shader_access_ok_after_grant(
+            tex_id in 0u64..100u64,
+            buf_id in 0u64..100u64,
+        ) {
+            let mut g = CapabilityGuard::new(
+                0,
+                CapabilityToken::TEXTURE_READ | CapabilityToken::UNIFORM_READ,
+            );
+            let _ = g.grant_texture(tex_id);
+            let _ = g.grant_buffer(buf_id);
+            prop_assert!(g.validate_shader_access(&[tex_id], &[buf_id]).is_ok());
+        }
+
+        #[test]
+        fn validate_shader_access_denies_ungranted(
+            tex_id in 0u64..100u64,
+            buf_id in 0u64..100u64,
+        ) {
+            let g = CapabilityGuard::new(
+                0,
+                CapabilityToken::TEXTURE_READ | CapabilityToken::UNIFORM_READ,
+            );
+            prop_assert!(g.validate_shader_access(&[tex_id], &[buf_id]).is_err());
+        }
+
+        #[test]
+        fn has_token_respects_bitflags(tokens in 0u32..=255u32) {
+            let token = CapabilityToken::from_bits_truncate(tokens);
+            let g = CapabilityGuard::new(0, token);
+            for bit in 0..8 {
+                let flag = CapabilityToken::from_bits_truncate(1 << bit);
+                prop_assert_eq!(g.has_token(flag), tokens & (1 << bit) != 0);
             }
         }
     }

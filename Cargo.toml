@@ -12,6 +12,7 @@ members = [
     "crates/tpt-chora-fallback",
     "crates/tpt-chora-compat",
     "crates/tpt-chora-all-subsystems",
+    "crates/tpt-chora-cli",
 ]
 
 [workspace.package]
@@ -38,6 +39,7 @@ tpt-chora-inspector = { path = "crates/tpt-chora-inspector", version = "0.1.0" }
 tpt-chora-fallback = { path = "crates/tpt-chora-fallback", version = "0.1.0" }
 tpt-chora-compat = { path = "crates/tpt-chora-compat", version = "0.1.0" }
 tpt-chora-all-subsystems = { path = "crates/tpt-chora-all-subsystems", version = "0.1.0" }
+tpt-chora-cli = { path = "crates/tpt-chora-cli", version = "0.1.0" }
 
 [profile.release]
 opt-level = 3

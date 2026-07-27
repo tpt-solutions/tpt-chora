@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct HierarchicalZDepth {
     base_z: f32,
     slice_size: f32,
@@ -90,5 +91,101 @@ impl std::fmt::Display for ZDepthViolation {
                 )
             }
         }
+    }
+}
+
+impl std::error::Error for ZDepthViolation {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compute_z_within_bounds() {
+        let hz = HierarchicalZDepth::new(10.0, 1.0, 100.0);
+        let z = hz.compute_z(10.0, 0, false).unwrap();
+        assert_eq!(z, 11.0);
+    }
+
+    #[test]
+    fn compute_z_exceeds_max() {
+        let hz = HierarchicalZDepth::new(0.0, 10.0, 50.0);
+        let err = hz.compute_z(45.0, 0, false).unwrap_err();
+        match err {
+            ZDepthViolation::ExceedsMaxDepth { requested, max } => {
+                assert!(requested > max);
+                assert_eq!(max, 50.0);
+            }
+            _ => panic!("expected ExceedsMaxDepth"),
+        }
+    }
+
+    #[test]
+    fn compute_z_modal_required() {
+        let hz = HierarchicalZDepth::new(0.0, 1.0, 200.0);
+        let err = hz.compute_z(11.0, 0, false).unwrap_err();
+        match err {
+            ZDepthViolation::ModalRequired { .. } => {}
+            _ => panic!("expected ModalRequired"),
+        }
+    }
+
+    #[test]
+    fn compute_z_modal_allowed() {
+        let hz = HierarchicalZDepth::new(0.0, 1.0, 200.0);
+        let z = hz.compute_z(11.0, 0, true).unwrap();
+        assert_eq!(z, 12.0);
+    }
+
+    #[test]
+    fn validate_hierarchy_valid() {
+        let hz = HierarchicalZDepth::new(0.0, 5.0, 100.0);
+        assert!(hz.validate_hierarchy(10.0, 15.0, false).is_ok());
+    }
+
+    #[test]
+    fn validate_hierarchy_child_behind_parent() {
+        let hz = HierarchicalZDepth::new(0.0, 5.0, 100.0);
+        let err = hz.validate_hierarchy(20.0, 15.0, false).unwrap_err();
+        match err {
+            ZDepthViolation::ChildBehindParent { parent_z, child_z } => {
+                assert_eq!(parent_z, 20.0);
+                assert_eq!(child_z, 15.0);
+            }
+            _ => panic!("expected ChildBehindParent"),
+        }
+    }
+
+    #[test]
+    fn validate_hierarchy_child_equal_to_parent() {
+        let hz = HierarchicalZDepth::new(0.0, 5.0, 100.0);
+        let err = hz.validate_hierarchy(10.0, 10.0, false).unwrap_err();
+        assert!(matches!(err, ZDepthViolation::ChildBehindParent { .. }));
+    }
+
+    #[test]
+    fn validate_hierarchy_gap_exceeds_slice() {
+        let hz = HierarchicalZDepth::new(0.0, 5.0, 200.0);
+        let err = hz.validate_hierarchy(0.0, 11.0, false).unwrap_err();
+        match err {
+            ZDepthViolation::GapExceedsSlice { gap, slice_size } => {
+                assert!((gap - 11.0).abs() < f32::EPSILON);
+                assert_eq!(slice_size, 5.0);
+            }
+            _ => panic!("expected GapExceedsSlice"),
+        }
+    }
+
+    #[test]
+    fn validate_hierarchy_gap_with_modal_allowed() {
+        let hz = HierarchicalZDepth::new(0.0, 5.0, 200.0);
+        assert!(hz.validate_hierarchy(0.0, 11.0, true).is_ok());
+    }
+
+    #[test]
+    fn z_depth_violation_is_error() {
+        let err: Box<dyn std::error::Error> =
+            Box::new(ZDepthViolation::ModalRequired { requested_z: 5.0 });
+        assert!(err.to_string().contains("Modal"));
     }
 }

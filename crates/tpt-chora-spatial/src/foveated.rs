@@ -98,6 +98,12 @@ impl FoveatedRenderer {
     }
 }
 
+impl Default for FoveatedRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum FoveationLevel {
     Inner(u32),

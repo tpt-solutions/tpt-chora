@@ -152,3 +152,9 @@ impl EidosTranspiler {
             .and_then(|s| s.trim().parse::<f32>().ok())
     }
 }
+
+impl Default for EidosTranspiler {
+    fn default() -> Self {
+        Self::new()
+    }
+}

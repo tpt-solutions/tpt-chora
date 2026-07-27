@@ -11,6 +11,7 @@ pub struct ComponentBridge {
     event_log: Vec<(String, Vec<u8>)>,
     width: u32,
     height: u32,
+    renderer: Option<tpt_chora_render::Renderer>,
 }
 
 impl ComponentBridge {
@@ -21,6 +22,7 @@ impl ComponentBridge {
             event_log: Vec::new(),
             width: 0,
             height: 0,
+            renderer: None,
         }
     }
 
@@ -28,11 +30,19 @@ impl ComponentBridge {
         self.width = 300;
         self.height = 150;
         self.buffer = vec![0u8; (self.width * self.height * 4) as usize];
+        self.renderer = tpt_chora_render::Renderer::new_headless(self.width, self.height).ok();
     }
 
     pub fn render(&self, width: u32, height: u32) -> Vec<u8> {
-        let mut pixels = vec![0u8; (width * height * 4) as usize];
+        if let Some(ref renderer) = self.renderer {
+            if let Ok(pixels) = renderer.render_frame() {
+                if pixels.len() == (width * height * 4) as usize {
+                    return pixels;
+                }
+            }
+        }
 
+        let mut pixels = vec![0u8; (width * height * 4) as usize];
         let name_hash = self
             .config
             .name

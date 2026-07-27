@@ -60,3 +60,9 @@ impl ColorProof {
         self.mode
     }
 }
+
+impl Default for ColorProof {
+    fn default() -> Self {
+        Self::new()
+    }
+}

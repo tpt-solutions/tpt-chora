@@ -137,7 +137,7 @@ pub fn build_glyph_vertices(
     let mut all_vertices = Vec::new();
     let mut all_indices = Vec::new();
 
-    for (_i, glyph) in shaped_glyphs.iter().enumerate() {
+    for glyph in shaped_glyphs.iter() {
         let info = atlas.glyphs.get(&(glyph.glyph_id));
         if let Some(_info) = info {
             if let Some((verts, indices)) = build_subpixel_vertices(

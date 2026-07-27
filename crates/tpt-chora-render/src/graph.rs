@@ -9,6 +9,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::error::RenderError;
+use crate::security::SecurityContext;
 
 /// A named handle to a transient resource owned by the graph for one execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -24,6 +25,7 @@ pub struct TransientTextureDesc {
 }
 
 /// A resolved transient texture, handed to nodes at execute time.
+#[derive(Debug)]
 pub struct TransientTexture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
@@ -36,6 +38,7 @@ pub struct TransientTexture {
 /// an input texture view) and mutably borrow `encoder` (to record into
 /// it) in the same statement, and only direct field access lets the
 /// borrow checker see those two borrows as disjoint.
+#[derive(Debug)]
 pub struct NodeExecuteCtx<'a> {
     pub device: &'a wgpu::Device,
     pub queue: &'a wgpu::Queue,
@@ -164,10 +167,13 @@ impl RenderGraph {
 
     /// Allocates every declared transient resource, then runs each node's
     /// pass in dependency order, all inside one command encoder/submission.
+    /// If `security` is provided, each node's resource access is validated
+    /// against the capability guard before execution.
     pub fn execute(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        security: Option<&SecurityContext>,
     ) -> Result<(), RenderError> {
         let order = self.topo_order()?;
 
@@ -198,6 +204,16 @@ impl RenderGraph {
         });
 
         for &i in &order {
+            if let Some(sec) = security {
+                let node = &self.nodes[i];
+                let texture_ids: Vec<u64> = node
+                    .reads
+                    .iter()
+                    .chain(node.writes.iter())
+                    .map(|id| id.0.as_ptr() as u64)
+                    .collect();
+                sec.validate_node(&texture_ids, &[])?;
+            }
             let node = &mut self.nodes[i];
             let mut ctx = NodeExecuteCtx {
                 device,
@@ -219,5 +235,104 @@ impl RenderGraph {
 impl RenderGraph {
     pub fn texture(&self, id: ResourceId) -> Option<&wgpu::Texture> {
         self.resources.get(&id).map(|t| &t.texture)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn noop_node(name: &'static str) -> GraphNode {
+        GraphNode::new(name, |_| {})
+    }
+
+    #[test]
+    fn empty_graph_topo_order() {
+        let graph = RenderGraph::new();
+        assert_eq!(graph.topo_order().unwrap(), Vec::<usize>::new());
+    }
+
+    #[test]
+    fn single_node_no_deps() {
+        let mut graph = RenderGraph::new();
+        graph.add_node(noop_node("a"));
+        let order = graph.topo_order().unwrap();
+        assert_eq!(order, vec![0]);
+    }
+
+    #[test]
+    fn acyclic_two_nodes_ordering() {
+        let mut graph = RenderGraph::new();
+
+        let a = GraphNode::new("a", |_| {}).creates(ResourceId("x"), dummy_tex_desc());
+        let b = GraphNode::new("b", |_| {}).reads(vec![ResourceId("x")]);
+
+        graph.add_node(a);
+        graph.add_node(b);
+
+        let order = graph.topo_order().unwrap();
+        assert_eq!(order, vec![0, 1]);
+    }
+
+    #[test]
+    fn cycle_detection() {
+        let mut graph = RenderGraph::new();
+
+        let a = GraphNode::new("a", |_| {})
+            .creates(ResourceId("x"), dummy_tex_desc())
+            .reads(vec![ResourceId("y")]);
+        let b = GraphNode::new("b", |_| {})
+            .creates(ResourceId("y"), dummy_tex_desc())
+            .reads(vec![ResourceId("x")]);
+
+        graph.add_node(a);
+        graph.add_node(b);
+
+        assert!(matches!(graph.topo_order(), Err(RenderError::GraphCycle)));
+    }
+
+    #[test]
+    fn diamond_dependency() {
+        let mut graph = RenderGraph::new();
+
+        let a = GraphNode::new("a", |_| {}).creates(ResourceId("x"), dummy_tex_desc());
+        let b = GraphNode::new("b", |_| {})
+            .reads(vec![ResourceId("x")])
+            .creates(ResourceId("y"), dummy_tex_desc());
+        let c = GraphNode::new("c", |_| {}).reads(vec![ResourceId("x"), ResourceId("y")]);
+
+        graph.add_node(a);
+        graph.add_node(b);
+        graph.add_node(c);
+
+        let order = graph.topo_order().unwrap();
+        let pos_of = |idx: usize| order.iter().position(|&i| i == idx).unwrap();
+
+        assert!(pos_of(0) < pos_of(1));
+        assert!(pos_of(0) < pos_of(2));
+        assert!(pos_of(1) < pos_of(2));
+    }
+
+    #[test]
+    fn self_dependency_ignored() {
+        let mut graph = RenderGraph::new();
+
+        let a = GraphNode::new("a", |_| {})
+            .creates(ResourceId("x"), dummy_tex_desc())
+            .reads(vec![ResourceId("x")]);
+
+        graph.add_node(a);
+
+        let order = graph.topo_order().unwrap();
+        assert_eq!(order, vec![0]);
+    }
+
+    fn dummy_tex_desc() -> TransientTextureDesc {
+        TransientTextureDesc {
+            width: 1,
+            height: 1,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        }
     }
 }

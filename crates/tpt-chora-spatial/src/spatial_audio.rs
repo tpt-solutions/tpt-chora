@@ -44,9 +44,8 @@ impl SpatialAudioOutput {
 
     pub fn play_wav_data(&self, data: &[u8]) {
         let cursor = Cursor::new(data.to_vec());
-        match rodio::Decoder::new_wav(cursor) {
-            Ok(source) => self.sink.append(source),
-            Err(_) => {}
+        if let Ok(source) = rodio::Decoder::new_wav(cursor) {
+            self.sink.append(source);
         }
     }
 
@@ -173,7 +172,7 @@ impl SpatialAudioEngine {
 
         let itd_delay = if distance > 0.001 {
             let signed_dist = to_source.dot(right);
-            (signed_dist / 343.0).max(-0.0012).min(0.0012)
+            (signed_dist / 343.0).clamp(-0.0012, 0.0012)
         } else {
             0.0
         };
@@ -198,6 +197,12 @@ impl SpatialAudioEngine {
 
     pub fn listener_position(&self) -> Vec3 {
         self.listener_pos
+    }
+}
+
+impl Default for SpatialAudioEngine {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

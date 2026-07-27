@@ -91,3 +91,9 @@ impl DirtyRectTracker {
         self.current_rects.push(merged);
     }
 }
+
+impl Default for DirtyRectTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}

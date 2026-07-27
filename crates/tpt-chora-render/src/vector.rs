@@ -5,6 +5,8 @@
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
+use crate::error::RenderError;
+
 /// A cubic Bezier curve segment in normalized device coordinates.
 #[derive(Debug, Clone, Copy)]
 pub struct CubicBezier {
@@ -82,7 +84,7 @@ pub fn tessellate_cubics_gpu(
     queue: &wgpu::Queue,
     curves: &[CubicBezier],
     segments_per_curve: u32,
-) -> Vec<[f32; 2]> {
+) -> Result<Vec<[f32; 2]>, RenderError> {
     let curve_count = curves.len() as u32;
     let points_per_curve = segments_per_curve + 1;
     let total_points = (points_per_curve * curve_count) as usize;
@@ -223,13 +225,95 @@ pub fn tessellate_cubics_gpu(
     });
     device.poll(wgpu::Maintain::Wait);
     rx.recv()
-        .expect("map_async callback dropped without a result")
-        .expect("failed to map tessellation readback buffer");
+        .map_err(|e| RenderError::Readback(format!("channel closed: {e}")))?
+        .map_err(|e| RenderError::Readback(format!("map failed: {e}")))?;
 
     let data = slice.get_mapped_range();
     let points: Vec<[f32; 2]> = bytemuck::cast_slice(&data).to_vec();
     drop(data);
     staging_buf.unmap();
 
-    points
+    Ok(points)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn circle_path_count() {
+        let curves = circle_path([0.0, 0.0], 1.0);
+        assert_eq!(curves.len(), 4);
+    }
+
+    #[test]
+    fn circle_path_control_points_within_bounds() {
+        let center = [5.0, 10.0];
+        let radius = 3.0;
+        let curves = circle_path(center, radius);
+
+        for curve in &curves {
+            for pt in [&curve.p0, &curve.p1, &curve.p2, &curve.p3] {
+                assert!(
+                    pt[0] >= center[0] - radius - 0.01 && pt[0] <= center[0] + radius + 0.01,
+                    "x={} outside bounds",
+                    pt[0]
+                );
+                assert!(
+                    pt[1] >= center[1] - radius - 0.01 && pt[1] <= center[1] + radius + 0.01,
+                    "y={} outside bounds",
+                    pt[1]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn circle_path_closure() {
+        let curves = circle_path([0.0, 0.0], 5.0);
+
+        for i in 0..4 {
+            let next = (i + 1) % 4;
+            let p3 = curves[i].p3;
+            let p0_next = curves[next].p0;
+            assert!(
+                (p3[0] - p0_next[0]).abs() < f32::EPSILON
+                    && (p3[1] - p0_next[1]).abs() < f32::EPSILON,
+                "curve {} p3 {:?} != curve {} p0 {:?}",
+                i,
+                p3,
+                next,
+                p0_next
+            );
+        }
+    }
+
+    #[test]
+    fn circle_path_p0_starts_at_positive_x_axis() {
+        let curves = circle_path([0.0, 0.0], 1.0);
+        let p0 = curves[0].p0;
+        assert!((p0[0] - 1.0).abs() < f32::EPSILON);
+        assert!((p0[1] - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn circle_path_symmetry() {
+        let curves = circle_path([0.0, 0.0], 2.0);
+        for curve in &curves {
+            let p0 = curve.p0;
+            let p3 = curve.p3;
+            let dist_p0 = (p0[0] * p0[0] + p0[1] * p0[1]).sqrt();
+            let dist_p3 = (p3[0] * p3[0] + p3[1] * p3[1]).sqrt();
+            assert!(
+                (dist_p0 - 2.0).abs() < 0.001,
+                "p0 distance from origin: {}",
+                dist_p0
+            );
+            assert!(
+                (dist_p3 - 2.0).abs() < 0.001,
+                "p3 distance from origin: {}",
+                dist_p3
+            );
+        }
+    }
 }

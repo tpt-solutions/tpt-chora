@@ -184,3 +184,9 @@ impl DynamicFidelity {
         self.current_level = level;
     }
 }
+
+impl Default for DynamicFidelity {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -66,7 +66,7 @@ impl HotReloader {
     }
 
     pub fn process_change(&mut self, path: &Path) -> Option<ReloadEvent> {
-        let event = match path.extension().and_then(|e| e.to_str()) {
+        match path.extension().and_then(|e| e.to_str()) {
             Some("eidos") => Some(ReloadEvent::EidosFileChanged(path.to_path_buf())),
             Some("wgsl") | Some("glsl") | Some("spirv") => {
                 Some(ReloadEvent::ShaderFileChanged(path.to_path_buf()))
@@ -75,13 +75,7 @@ impl HotReloader {
                 Some(ReloadEvent::AssetChanged(path.to_path_buf()))
             }
             _ => None,
-        };
-
-        if let Some(ref evt) = event {
-            self.pending_events.push(evt.clone());
         }
-
-        event
     }
 
     pub fn watched_count(&self) -> usize {
@@ -94,5 +88,143 @@ impl HotReloader {
 
     pub fn drain_pending(&mut self) -> Vec<ReloadEvent> {
         std::mem::take(&mut self.pending_events)
+    }
+}
+
+impl Default for HotReloader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::thread;
+    use std::time::Duration;
+
+    fn temp_path(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("tpt_chora_test_{}", name))
+    }
+
+    fn create_temp_file(name: &str, contents: &[u8]) -> PathBuf {
+        let p = temp_path(name);
+        fs::write(&p, contents).unwrap();
+        p
+    }
+
+    fn cleanup(path: &Path) {
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn new_creates_empty_reloader() {
+        let r = HotReloader::new();
+        assert_eq!(r.watched_count(), 0);
+        assert_eq!(r.pending_count(), 0);
+    }
+
+    #[test]
+    fn watch_increases_count() {
+        let p = create_temp_file("watch_basic.dat", b"hello");
+        let mut r = HotReloader::new();
+        r.watch(p.clone());
+        assert_eq!(r.watched_count(), 1);
+        cleanup(&p);
+    }
+
+    #[test]
+    fn unwatch_decreases_count() {
+        let p = create_temp_file("unwatch_basic.dat", b"hello");
+        let mut r = HotReloader::new();
+        r.watch(p.clone());
+        assert_eq!(r.watched_count(), 1);
+        r.unwatch(&p);
+        assert_eq!(r.watched_count(), 0);
+        assert!(!r.last_modified.contains_key(&p));
+        cleanup(&p);
+    }
+
+    #[test]
+    fn process_change_eidos() {
+        let mut r = HotReloader::new();
+        let p = PathBuf::from("/fake/file.eidos");
+        let event = r.process_change(&p).unwrap();
+        match event {
+            ReloadEvent::EidosFileChanged(path) => assert_eq!(path, p),
+            _ => panic!("expected EidosFileChanged"),
+        }
+    }
+
+    #[test]
+    fn process_change_wgsl() {
+        let mut r = HotReloader::new();
+        let p = PathBuf::from("/fake/shader.wgsl");
+        let event = r.process_change(&p).unwrap();
+        match event {
+            ReloadEvent::ShaderFileChanged(path) => assert_eq!(path, p),
+            _ => panic!("expected ShaderFileChanged"),
+        }
+    }
+
+    #[test]
+    fn process_change_png() {
+        let mut r = HotReloader::new();
+        let p = PathBuf::from("/fake/image.png");
+        let event = r.process_change(&p).unwrap();
+        match event {
+            ReloadEvent::AssetChanged(path) => assert_eq!(path, p),
+            _ => panic!("expected AssetChanged"),
+        }
+    }
+
+    #[test]
+    fn process_change_unknown_extension() {
+        let mut r = HotReloader::new();
+        let p = PathBuf::from("/fake/readme.txt");
+        assert!(r.process_change(&p).is_none());
+    }
+
+    #[test]
+    fn poll_events_no_change() {
+        let p = create_temp_file("poll_nochange.eidos", b"data");
+        let mut r = HotReloader::new();
+        r.watch(p.clone());
+        let events = r.poll_events();
+        assert!(events.is_empty());
+        assert_eq!(r.pending_count(), 0);
+        cleanup(&p);
+    }
+
+    #[test]
+    fn poll_events_detects_change() {
+        let p = create_temp_file("poll_change.eidos", b"before");
+        let mut r = HotReloader::new();
+        r.watch(p.clone());
+
+        thread::sleep(Duration::from_millis(1100));
+        fs::write(&p, b"after").unwrap();
+
+        let events = r.poll_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(r.pending_count(), 1);
+        cleanup(&p);
+    }
+
+    #[test]
+    fn drain_pending_returns_all_and_clears() {
+        let p = create_temp_file("drain.eidos", b"before");
+        let mut r = HotReloader::new();
+        r.watch(p.clone());
+
+        thread::sleep(Duration::from_millis(1100));
+        fs::write(&p, b"after").unwrap();
+        r.poll_events();
+
+        let drained = r.drain_pending();
+        assert_eq!(drained.len(), 1);
+        assert_eq!(r.pending_count(), 0);
+        cleanup(&p);
     }
 }
