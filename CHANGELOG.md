@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- New workspace crate `crates/tpt-chora-bench` (Phase 18): `criterion`
+  benchmarks for GPU Bezier-tessellation throughput (10k/50k/100k curves)
+  and zero-copy `ChoraRuntime::bind_state_to_gpu` ingestion (4KB/64KB/1MB
+  payloads), a plain frame-pacing benchmark reporting mean/p95/p99 frame
+  times, and a `dhat`-backed steady-state heap-growth test (feature
+  `dhat-heap`) that catches per-frame leaks automatically. Wired into CI as
+  a `benchmarks` job running in criterion's fast `--test` mode (a
+  build/execution regression signal, not a perf-threshold gate — shared CI
+  runners are too noisy for stable statistical baselines).
+
 ### Fixed
 - `tpt-chora-render`: `RenderGraph::execute`'s security guard validated
   every node's texture reads/writes against `CapabilityGuard` but nothing

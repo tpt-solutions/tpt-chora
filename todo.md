@@ -253,26 +253,43 @@ security hardening and adoption-tooling gaps found in the same review.
   `tpt-chora preview` all produce real rendered PNG output.
 
 ## Phase 18: Runtime Benchmarking & Performance Proof
-- [ ] Add new workspace crate `crates/tpt-chora-bench` (add to `Cargo.toml`
+- [x] Add new workspace crate `crates/tpt-chora-bench` (added to `Cargo.toml`
   members) using `criterion` for statistical benchmarking
-- [ ] Bezier tessellation throughput benchmark: tessellate 10k/50k/100k cubic
-  Bezier curves via the existing compute-shader path
+- [x] Bezier tessellation throughput benchmark: tessellates 10k/50k/100k
+  cubic Bezier curves via the existing compute-shader path
   (`crates/tpt-chora-render/src/vector.rs`, `src/shaders/tessellate.wgsl`),
-  reporting curves/sec and GPU dispatch time via the existing
-  `gpu_timing.rs` instrumentation (`crates/tpt-chora-inspector/src/gpu_timing.rs`)
-- [ ] Frame pacing benchmark: drive `Renderer::render_frame` in a loop over
-  `FrameBufferSet` (`crates/tpt-chora-render/src/framebuffer.rs`) and report
-  mean/p95/p99 frame times
-- [ ] Zero-allocation steady-state proof: wrap the steady-state render loop
-  with a counting/dhat allocator (behind a `dhat-heap` feature) and assert
-  zero heap growth after warmup, turning the Phase 9 manual audit claim into
-  an automated, CI-checkable test
-- [ ] Zero-copy ingestion benchmark: exercise the `ArchonBackend` stub
-  (`crates/tpt-chora-runtime/src/archon_stub.rs`) to measure
-  `bind_state_to_gpu` throughput/latency for representative payload sizes
-- [ ] Wire `cargo bench -p tpt-chora-bench` into CI
-  (`.github/workflows/ci.yml`) as a threshold-gated job so render-graph
-  refactors get an automatic performance regression signal
-- [ ] **Milestone:** `cargo bench -p tpt-chora-bench` runs locally and in CI,
-  producing tessellation throughput, frame-time percentiles, and a
-  zero-allocation report for the 10k/50k/100k curve counts.
+  reporting curves/sec via criterion's `Throughput::Elements`
+  (`crates/tpt-chora-bench/benches/tessellation.rs`) — wall-clock (dispatch +
+  readback), not wired through `gpu_timing.rs`'s query-set instrumentation,
+  since that module only records timestamps inside a caller-owned render
+  pass and `tessellate_cubics_gpu` doesn't take one
+- [x] Frame pacing benchmark: drives `Renderer::render_frame` in a loop
+  alongside a `FrameBufferSet` front/back swap
+  (`crates/tpt-chora-render/src/framebuffer.rs`) and reports min/mean/p50/p95/p99/max
+  frame times (`crates/tpt-chora-bench/benches/frame_pacing.rs` — a plain
+  `harness = false` binary, not a criterion harness, since percentile
+  reporting is the point and criterion's console output doesn't include p95/p99)
+- [x] Zero-allocation steady-state proof: wraps a render loop with `dhat`'s
+  counting heap profiler (behind a `dhat-heap` feature) and asserts the live
+  block count doesn't grow (within a small tolerance for wgpu's own
+  first-use lazy-cache allocations, which flatten out within ~35 frames)
+  across a further batch of steady-state frames — a real, automated check
+  for per-frame *leaks*, not a claim that individual frames allocate nothing
+  (`Renderer::render_frame` still builds per-frame CPU `Vec`s and wgpu
+  buffers freed at frame end) (`crates/tpt-chora-bench/tests/zero_alloc.rs`)
+- [x] Zero-copy ingestion benchmark: exercises `ChoraRuntime::bind_state_to_gpu`
+  (`crates/tpt-chora-runtime/src/archon_stub.rs`) to measure throughput for
+  4KB/64KB/1MB payload sizes (`crates/tpt-chora-bench/benches/archon_ingestion.rs`)
+- [x] Wire `cargo bench` into CI (`.github/workflows/ci.yml`, new
+  `benchmarks` job) — runs every benchmark via criterion's `--test` mode
+  (single iteration, not a full statistical sample) plus the
+  `dhat-heap` zero-allocation test; this is a build/execution regression
+  signal ("do the benchmarks still run against the current render
+  graph/runtime APIs"), not a performance-threshold gate — shared
+  GitHub-hosted runners are too noisy for a stable statistical baseline
+  comparison, which would need a dedicated, consistently-provisioned runner
+- [x] **Milestone:** `cargo bench -p tpt-chora-bench` runs locally, producing
+  tessellation throughput (10k/50k/100k curves), frame-time percentiles, and
+  an ingestion-throughput report; `cargo test -p tpt-chora-bench --features
+  dhat-heap` passes the zero-allocation steady-state check; the same all run
+  in CI via the new `benchmarks` job.

@@ -1,0 +1,34 @@
+[package]
+name = "tpt-chora-bench"
+description = "tpt-chora runtime benchmarks: Bezier tessellation throughput, frame pacing, zero-allocation steady state, and zero-copy ingestion"
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+tpt-chora-render = { workspace = true }
+tpt-chora-runtime = { workspace = true }
+dhat = { version = "0.3", optional = true }
+
+[dev-dependencies]
+criterion = "0.5"
+
+[features]
+dhat-heap = ["dep:dhat"]
+
+[[bench]]
+name = "tessellation"
+harness = false
+
+[[bench]]
+name = "frame_pacing"
+harness = false
+
+[[bench]]
+name = "archon_ingestion"
+harness = false

@@ -6,3 +6,4 @@
 *.swp
 crates/*/examples/output/
 .claude/
+dhat-heap.json
