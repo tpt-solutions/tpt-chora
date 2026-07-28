@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::Path;
 
 use tpt_chora_compat::{CssParser, EidosTranspiler, ViolationReason};
 
@@ -12,18 +11,12 @@ pub enum CssReportError {
 }
 
 pub fn run(path: &str) -> Result<(), CssReportError> {
-    let contents =
-        fs::read_to_string(path).map_err(|e| CssReportError::ReadFile(e.to_string()))?;
+    let contents = fs::read_to_string(path).map_err(|e| CssReportError::ReadFile(e.to_string()))?;
 
     let mut parser = CssParser::new(contents);
     let parsed = parser
         .parse()
-        .map_err(|e| CssReportError::Parse(e.to_string()));
-
-    let parsed = match parsed {
-        Ok(p) => p,
-        Err(e) => return Err(e),
-    };
+        .map_err(|e| CssReportError::Parse(e.to_string()))?;
 
     let rule_count = parsed.rules.len();
     let decl_count: usize = parsed.rules.iter().map(|r| r.declarations.len()).sum();
@@ -52,7 +45,12 @@ pub fn run(path: &str) -> Result<(), CssReportError> {
     if !result.violations.is_empty() {
         println!("violations ({violation_count}):");
         for v in &result.violations {
-            println!("  {} [{}]: {}", v.rule_selector, v.property, reason_label(&v.reason));
+            println!(
+                "  {} [{}]: {}",
+                v.rule_selector,
+                v.property,
+                reason_label(&v.reason)
+            );
         }
         println!();
     }

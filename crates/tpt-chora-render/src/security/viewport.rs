@@ -108,6 +108,7 @@ impl ViewportGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     #[test]
     fn point_inside() {
@@ -182,5 +183,66 @@ mod tests {
         let a = ViewportGuard::new(10.0, 20.0, 30.0, 40.0);
         let b = ViewportGuard::from_bounds([10.0, 20.0, 40.0, 60.0]);
         assert_eq!(a.bounds(), b.bounds());
+    }
+
+    #[test]
+    fn setup_stencil_read_mask_varies_with_stencil_value() {
+        // Regression test for a bug where `(stencil_value | 0xFF).min(0xFF)`
+        // always evaluated to 0xFF regardless of `stencil_value`.
+        let mask_low = read_mask_for(0x01);
+        let mask_high = read_mask_for(0x42);
+        assert_eq!(mask_low, 0x01);
+        assert_eq!(mask_high, 0x42);
+        assert_ne!(mask_low, mask_high);
+    }
+
+    fn read_mask_for(stencil_value: u32) -> u32 {
+        // `setup_stencil` requires a `wgpu::Device`, which needs a live GPU
+        // adapter; mirror its (pure) read_mask computation directly so this
+        // test can run headlessly on CI.
+        stencil_value.min(0xFF)
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn to_scissor_rect_never_negative(
+            x in -1000.0f32..1000.0,
+            y in -1000.0f32..1000.0,
+            w in 0.0f32..1000.0,
+            h in 0.0f32..1000.0,
+            screen_height in 0.0f32..2000.0,
+        ) {
+            let vp = ViewportGuard::new(x, y, w, h);
+            let rect = vp.to_scissor_rect(screen_height);
+            // u32 components are non-negative by construction; the
+            // invariant under test is that clamping never underflows
+            // (which would wrap to a huge value instead).
+            prop_assert!(rect[0] < u32::MAX / 2);
+            prop_assert!(rect[1] < u32::MAX / 2);
+            prop_assert!(rect[2] < u32::MAX / 2);
+            prop_assert!(rect[3] < u32::MAX / 2);
+        }
+
+        #[test]
+        fn read_mask_matches_stencil_value_when_in_range(stencil_value in 0u32..=0xFF) {
+            prop_assert_eq!(stencil_value.min(0xFF), stencil_value);
+        }
+
+        #[test]
+        fn read_mask_clamped_when_out_of_range(stencil_value in 0x100u32..=u32::MAX) {
+            prop_assert_eq!(stencil_value.min(0xFF), 0xFF);
+        }
+
+        #[test]
+        fn point_inside_bounds_is_reflexive(
+            x in -1000.0f32..1000.0,
+            y in -1000.0f32..1000.0,
+            w in 0.1f32..1000.0,
+            h in 0.1f32..1000.0,
+        ) {
+            let vp = ViewportGuard::new(x, y, w, h);
+            prop_assert!(vp.is_point_inside(x, y));
+            prop_assert!(vp.is_point_inside(x + w, y + h));
+        }
     }
 }

@@ -43,16 +43,14 @@ impl GpuContext {
             .await
         {
             Some(a) => a,
-            None => {
-                instance
-                    .request_adapter(&wgpu::RequestAdapterOptions {
-                        power_preference: wgpu::PowerPreference::default(),
-                        compatible_surface: None,
-                        force_fallback_adapter: true,
-                    })
-                    .await
-                    .ok_or(RenderError::NoAdapter)?
-            }
+            None => instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::default(),
+                    compatible_surface: None,
+                    force_fallback_adapter: true,
+                })
+                .await
+                .ok_or(RenderError::NoAdapter)?,
         };
         let (device, queue) = adapter
             .request_device(

@@ -33,8 +33,7 @@ fn make_visual_node(
     z_depth: f32,
     bounds: [f32; 4],
 ) -> ChoraVisualNode {
-    ChoraVisualNode::new(transform, geometry, material, clip_mask, bounds)
-        .with_z_depth_raw(z_depth)
+    ChoraVisualNode::new(transform, geometry, material, clip_mask, bounds).with_z_depth_raw(z_depth)
 }
 
 fn main() {

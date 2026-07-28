@@ -169,23 +169,12 @@ impl VideoDecoder {
         Self { backend }
     }
 
-    pub fn decode_frame(
-        &self,
-        _encoded_data: &[u8],
-    ) -> Result<VideoFrame, crate::MediaError> {
+    pub fn decode_frame(&self, _encoded_data: &[u8]) -> Result<VideoFrame, crate::MediaError> {
         match &self.backend {
-            VideoDecodeBackend::VaApi => {
-                Err(crate::MediaError::VideoDecodeUnavailable)
-            }
-            VideoDecodeBackend::VideoToolbox => {
-                Err(crate::MediaError::VideoDecodeUnavailable)
-            }
-            VideoDecodeBackend::MediaCodec => {
-                Err(crate::MediaError::VideoDecodeUnavailable)
-            }
-            VideoDecodeBackend::SoftwareFallback => {
-                Err(crate::MediaError::VideoDecodeUnavailable)
-            }
+            VideoDecodeBackend::VaApi => Err(crate::MediaError::VideoDecodeUnavailable),
+            VideoDecodeBackend::VideoToolbox => Err(crate::MediaError::VideoDecodeUnavailable),
+            VideoDecodeBackend::MediaCodec => Err(crate::MediaError::VideoDecodeUnavailable),
+            VideoDecodeBackend::SoftwareFallback => Err(crate::MediaError::VideoDecodeUnavailable),
         }
     }
 

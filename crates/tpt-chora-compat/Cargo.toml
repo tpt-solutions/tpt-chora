@@ -14,4 +14,5 @@ categories.workspace = true
 
 [dependencies]
 thiserror = "1.0"
+wasmtime = "24"
 tpt-chora-render = { workspace = true }

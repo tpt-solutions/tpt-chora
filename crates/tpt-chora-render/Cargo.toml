@@ -19,10 +19,11 @@ pollster = "0.3"
 thiserror = "1.0"
 bitflags = "2.4"
 tpt-chora-spatial = { workspace = true, optional = true }
+glam = { version = "0.25", optional = true }
 
 [features]
 default = []
-spatial = ["dep:tpt-chora-spatial"]
+spatial = ["dep:tpt-chora-spatial", "dep:glam"]
 
 [dev-dependencies]
 png = "0.17"

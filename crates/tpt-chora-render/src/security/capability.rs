@@ -44,10 +44,7 @@ impl CapabilityGuard {
         self.allowed_tokens.contains(token)
     }
 
-    pub fn grant_texture(
-        &mut self,
-        texture_id: u64,
-    ) -> Result<(), ShaderAccessViolation> {
+    pub fn grant_texture(&mut self, texture_id: u64) -> Result<(), ShaderAccessViolation> {
         if !self.has_token(CapabilityToken::TEXTURE_READ) {
             return Err(ShaderAccessViolation::TextureDenied {
                 owner: self.owner_id,
@@ -58,10 +55,7 @@ impl CapabilityGuard {
         Ok(())
     }
 
-    pub fn grant_buffer(
-        &mut self,
-        buffer_id: u64,
-    ) -> Result<(), ShaderAccessViolation> {
+    pub fn grant_buffer(&mut self, buffer_id: u64) -> Result<(), ShaderAccessViolation> {
         if !self.has_token(CapabilityToken::UNIFORM_READ)
             && !self.has_token(CapabilityToken::STORAGE_READ)
         {
@@ -135,6 +129,7 @@ impl std::error::Error for ShaderAccessViolation {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     fn guard() -> CapabilityGuard {
         CapabilityGuard::new(

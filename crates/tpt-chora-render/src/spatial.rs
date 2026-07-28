@@ -6,12 +6,8 @@ pub const VOLUMETRIC_OUTPUT: ResourceId = ResourceId("volumetric_output");
 pub const STEREO_LEFT: ResourceId = ResourceId("stereo_left");
 pub const STEREO_RIGHT: ResourceId = ResourceId("stereo_right");
 
-pub fn create_volumetric_node(
-    width: u32,
-    height: u32,
-    format: wgpu::TextureFormat,
-) -> GraphNode {
-    GraphNode::new("volumetric_fog", move |ctx: &mut NodeExecuteCtx<'_> {
+pub fn create_volumetric_node(width: u32, height: u32, format: wgpu::TextureFormat) -> GraphNode {
+    GraphNode::new("volumetric_fog", move |ctx: &mut NodeExecuteCtx<'_>| {
         let scene_view = &ctx.resources[&ResourceId("scene_color")].view;
         let depth_view = scene_view;
         let output_view = &ctx.resources[&VOLUMETRIC_OUTPUT].view;
@@ -43,23 +39,15 @@ pub fn create_volumetric_node(
     )
 }
 
-pub fn create_stereo_node(
-    width: u32,
-    height: u32,
-    format: wgpu::TextureFormat,
-) -> GraphNode {
-    GraphNode::new("stereoscopic", move |ctx: &mut NodeExecuteCtx<'_> {
+pub fn create_stereo_node(width: u32, height: u32, format: wgpu::TextureFormat) -> GraphNode {
+    GraphNode::new("stereoscopic", move |ctx: &mut NodeExecuteCtx<'_>| {
         let left_view = &ctx.resources[&STEREO_LEFT].view;
         let right_view = &ctx.resources[&STEREO_RIGHT].view;
 
-        let renderer = tpt_chora_spatial::StereoscopicRenderer::new(
-            ctx.device,
-            width,
-            height,
-            format,
-        );
+        let renderer =
+            tpt_chora_spatial::StereoscopicRenderer::new(ctx.device, width, height, format);
 
-        use glam::{Mat4, Vec3};
+        use glam::Vec3;
         let (left_stereo, right_stereo) = renderer.create_stereo_views(
             Vec3::new(0.0, 0.0, 3.0),
             Vec3::ZERO,
@@ -72,16 +60,20 @@ pub fn create_stereo_node(
             1.0,
         );
 
-        let vb = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("stereo-placeholder-vb"),
-            contents: bytemuck::cast_slice(&[0f32; 6]),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let ib = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("stereo-placeholder-ib"),
-            contents: bytemuck::cast_slice(&[0u32; 3]),
-            usage: wgpu::BufferUsages::INDEX,
-        });
+        let vb = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("stereo-placeholder-vb"),
+                contents: bytemuck::cast_slice(&[0f32; 6]),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+        let ib = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("stereo-placeholder-ib"),
+                contents: bytemuck::cast_slice(&[0u32; 3]),
+                usage: wgpu::BufferUsages::INDEX,
+            });
         let geometry = tpt_chora_spatial::StereoGeometry {
             vertex_buffer: vb,
             index_buffer: ib,
@@ -89,8 +81,22 @@ pub fn create_stereo_node(
             vertex_stride: 24,
         };
 
-        renderer.record_pass(ctx.device, ctx.encoder, left_view, right_view, &left_stereo, &geometry);
-        renderer.record_pass(ctx.device, ctx.encoder, left_view, right_view, &right_stereo, &geometry);
+        renderer.record_pass(
+            ctx.device,
+            ctx.encoder,
+            left_view,
+            right_view,
+            &left_stereo,
+            &geometry,
+        );
+        renderer.record_pass(
+            ctx.device,
+            ctx.encoder,
+            left_view,
+            right_view,
+            &right_stereo,
+            &geometry,
+        );
     })
     .creates(
         STEREO_LEFT,
@@ -112,18 +118,13 @@ pub fn create_stereo_node(
     )
 }
 
-pub fn create_foveation_node(
-    width: f32,
-    height: f32,
-) -> GraphNode {
-    GraphNode::new("foveated_rendering", move |ctx: &mut NodeExecuteCtx<'_> {
-        let renderer = tpt_chora_spatial::FoveatedRenderer::new();
-        let _level = renderer.compute_foveation_level(
-            width * 0.5,
-            height * 0.5,
-            None,
-            width,
-            height,
-        );
-    })
+pub fn create_foveation_node(width: f32, height: f32) -> GraphNode {
+    GraphNode::new(
+        "foveated_rendering",
+        move |_ctx: &mut NodeExecuteCtx<'_>| {
+            let renderer = tpt_chora_spatial::FoveatedRenderer::new();
+            let _level =
+                renderer.compute_foveation_level(width * 0.5, height * 0.5, None, width, height);
+        },
+    )
 }

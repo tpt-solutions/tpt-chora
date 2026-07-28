@@ -135,7 +135,7 @@ piece); this phase is the honest "what's left" list.
 - [x] Phase 6: implement `VideoDecoder` type with platform-specific backend detection (VA-API/VideoToolbox/MediaCodec/software-fallback); `decode_frame` returns `VideoDecodeUnavailable` until real platform bindings are added (`crates/tpt-chora-media/src/decode.rs`)
 - [x] Phase 5: implement real OS accessibility bridge calls — `A11yBridge` now detects platform (Windows/macOS/Android) and calls platform-specific sync methods; OS API calls are documented but require platform crate bindings (`crates/tpt-chora-a11y/src/bridge.rs`)
 - [x] Phase 4: implement real haptics platform dispatch — `play_corehaptics`/`play_android` now execute pattern timing on the correct platform and return `HapticNotSupported` on others; `play_xr_rumble` returns `HapticNotSupported` until XR session API is available (`crates/tpt-chora-input/src/haptics.rs`)
-- [ ] Phase 12: give `FfiBridge::call_function` a real Wasm execution engine (e.g. `wasmtime`) — it currently returns cached bytes or echoes input, it doesn't execute anything (`crates/tpt-chora-compat/src/ffi_bridge.rs`)
+- [x] Phase 12: give `FfiBridge::call_function` a real Wasm execution engine (e.g. `wasmtime`) — `FfiBridge` now compiles/instantiates modules via `wasmtime::{Module, Store, Linker}` and `call_function` decodes packed args per the callee's real param types and actually invokes it (`crates/tpt-chora-compat/src/ffi_bridge.rs`)
 - [x] Phase 12: connect `web_component.rs::render()` to real renderer output — now uses `tpt_chora_render::Renderer` when available, falls back to placeholder on GPU init failure (`crates/tpt-chora-compat/src/web_component.rs`)
 - [x] Phase 13: use the `shader_urls` field in the generated bootstrap script (shader fetch loop generated per-URL), and added `wasm_binary_size_bytes()` accessor for accurate Wasm size measurement (`crates/tpt-chora-compat/src/deployment/bootstrap.rs`)
 - [x] Phase 7: give `archon_stub`/`telos_stub` a real trait boundary (`ArchonBackend`/`TelosBackend` traits) so swapping in the real `tpt-archon`/`tpt-telos` crates later doesn't require touching every call site (`crates/tpt-chora-runtime/src/archon_stub.rs`, `src/telos_stub.rs`, `src/lib.rs`)
@@ -147,8 +147,21 @@ piece); this phase is the honest "what's left" list.
   - `ttf-parser` (RUSTSEC-2026-0192): transitive dep via `rustybuzz@0.11` (v0.20.0) and `ab_glyph` (v0.25.1); replacing `rustybuzz` with `swash`/`skrifa` eliminates the v0.20.0 copy; `ttf-parser@0.25.1` is a dep of `ab_glyph` and will be resolved when `ab_glyph` updates
 
 ## Phase 16: Adoption Tooling & Hardening Tests
-- [ ] Add `tpt-chora-cli` crate (new workspace member) with a `doctor` subcommand: reports wgpu backend/adapter selected, `wgpu::AdapterInfo::device_type` (surfaces whether Tier 1 software-fallback is active), and toolchain sanity — catches issues like a silently-broken gnu/MSVC linker mismatch before a confusing build failure (`crates/tpt-chora-cli/src/doctor.rs`)
-- [ ] Add `tpt-chora-cli new <name>` scaffolding subcommand: generates a minimal crate (Cargo.toml + main.rs calling `Renderer::new_headless` + a starter `.eidos` file) so new adopters don't have to reverse-engineer the 11-crate workspace to get a first render (`crates/tpt-chora-cli/src/new_app.rs`)
-- [ ] Add `tpt-chora-cli css-report <path>` subcommand: runs the existing `css_parser`/`eidos_transpiler` Rosetta Stone pipeline over a real CSS file and prints a compatibility score + violation list, so prospective adopters can see real numbers against their own site (`crates/tpt-chora-cli/src/css_report.rs`)
-- [ ] Add `proptest`-based property tests for `crates/tpt-chora-render/src/security/{capability,viewport,z_depth}.rs` covering the grant/revoke/has_token invariants, scissor-rect non-negativity, z-depth monotonicity, and a direct regression test that `setup_stencil`'s `read_mask` actually varies with `stencil_value` (written to catch the class of bug the audit found: a pure function whose output silently doesn't depend on one of its inputs)
+- [x] Add `tpt-chora-cli` crate (new workspace member) with a `doctor` subcommand: reports wgpu backend/adapter selected, `wgpu::AdapterInfo::device_type` (surfaces whether Tier 1 software-fallback is active), and toolchain sanity — catches issues like a silently-broken gnu/MSVC linker mismatch before a confusing build failure (`crates/tpt-chora-cli/src/doctor.rs`)
+- [x] Add `tpt-chora-cli new <name>` scaffolding subcommand: generates a minimal crate (Cargo.toml + main.rs calling `Renderer::new_headless` + a starter `.eidos` file) so new adopters don't have to reverse-engineer the 11-crate workspace to get a first render (`crates/tpt-chora-cli/src/new_app.rs`)
+- [x] Add `tpt-chora-cli css-report <path>` subcommand: runs the existing `css_parser`/`eidos_transpiler` Rosetta Stone pipeline over a real CSS file and prints a compatibility score + violation list, so prospective adopters can see real numbers against their own site (`crates/tpt-chora-cli/src/css_report.rs`)
+- [x] Add `proptest`-based property tests for `crates/tpt-chora-render/src/security/{capability,viewport,z_depth}.rs` covering the grant/revoke/has_token invariants, scissor-rect non-negativity, z-depth monotonicity, and a direct regression test that `setup_stencil`'s `read_mask` actually varies with `stencil_value` (written to catch the class of bug the audit found: a pure function whose output silently doesn't depend on one of its inputs)
 - [ ] (Follow-on, not yet actionable) Build-time capability lint for component definitions — blocked on the Phase 15 sandbox-wiring items landing and on components gaining a declarative capability-requirement format (currently built imperatively via `GraphNode` closures)
+
+### Fixes found while closing out Phase 16 (2026-07-28)
+The three `tpt-chora-cli` subcommands and the Phase 15 `spatial` feature wiring were
+present in source but did not actually compile; fixed as part of this pass:
+- `tpt-chora-cli`: raw-string literal in `new_app.rs` terminated early on a stray
+  `"#` sequence inside the generated `.eidos` template; `ViolationReason` wasn't
+  re-exported from `tpt-chora-compat`; `main.rs` matched two different per-command
+  error types in one `Result` — now boxed to `Box<dyn std::error::Error>`.
+- `tpt-chora-render`'s `#[cfg(feature = "spatial")] mod spatial` (nothing in the
+  workspace enables this feature yet, so `cargo build --workspace` never caught
+  it): three `GraphNode` closures were missing the closing `|` on their param
+  list (`move |ctx: &mut NodeExecuteCtx<'_> {` — a parse error), and the module
+  used `glam` without declaring it as a (feature-gated, optional) dependency.

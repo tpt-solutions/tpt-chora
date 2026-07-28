@@ -51,7 +51,7 @@ tpt-chora-render = {{ version = "0.1" }}
     write_file(
         &dir.join("starter.eidos"),
         &format!(
-            r#"// {name} — starter .eidos scene description
+            r##"// {name} — starter .eidos scene description
 // See spec.txt for the full Eidos IR reference.
 
 component "root" {{
@@ -59,14 +59,11 @@ component "root" {{
   height := "600";
   background := "#0a0a12";
 }}
-"#
+"##
         ),
     )?;
 
-    write_file(
-        &dir.join(".gitignore"),
-        "target/\n",
-    )?;
+    write_file(&dir.join(".gitignore"), "target/\n")?;
 
     println!("created project `{name}` in ./{name}/");
     println!();

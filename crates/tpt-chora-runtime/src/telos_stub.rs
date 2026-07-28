@@ -1,9 +1,6 @@
 pub trait TelosBackend {
-    fn process_event(
-        &mut self,
-        event: &TelosEvent,
-        proofs: &[EidosProof],
-    ) -> Option<StateMutation>;
+    fn process_event(&mut self, event: &TelosEvent, proofs: &[EidosProof])
+        -> Option<StateMutation>;
     fn transitions(&self) -> &[StateTransition];
     fn transition_count(&self) -> usize;
 }

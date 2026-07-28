@@ -99,6 +99,7 @@ impl std::error::Error for ZDepthViolation {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     #[test]
     fn compute_z_within_bounds() {
@@ -187,5 +188,50 @@ mod tests {
         let err: Box<dyn std::error::Error> =
             Box::new(ZDepthViolation::ModalRequired { requested_z: 5.0 });
         assert!(err.to_string().contains("Modal"));
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn compute_z_is_monotonic_in_sibling_index(
+            parent_z in 0.0f32..50.0,
+            slice_size in 0.1f32..5.0,
+            a in 0u32..100,
+            b in 0u32..100,
+        ) {
+            let hz = HierarchicalZDepth::new(0.0, slice_size, f32::MAX);
+            let za = hz.compute_z(parent_z, a, true);
+            let zb = hz.compute_z(parent_z, b, true);
+            if let (Ok(za), Ok(zb)) = (za, zb) {
+                if a < b {
+                    prop_assert!(za <= zb);
+                } else if a > b {
+                    prop_assert!(za >= zb);
+                } else {
+                    prop_assert_eq!(za, zb);
+                }
+            }
+        }
+
+        #[test]
+        fn compute_z_always_exceeds_parent(
+            parent_z in 0.0f32..50.0,
+            slice_size in 0.1f32..5.0,
+            sibling_index in 0u32..100,
+        ) {
+            let hz = HierarchicalZDepth::new(0.0, slice_size, f32::MAX);
+            if let Ok(z) = hz.compute_z(parent_z, sibling_index, true) {
+                prop_assert!(z > parent_z);
+            }
+        }
+
+        #[test]
+        fn validate_hierarchy_rejects_non_increasing_z(
+            parent_z in 0.0f32..1000.0,
+            delta in 0.0f32..100.0,
+        ) {
+            let hz = HierarchicalZDepth::new(0.0, 5.0, f32::MAX);
+            let child_z = parent_z - delta;
+            prop_assert!(hz.validate_hierarchy(parent_z, child_z, true).is_err());
+        }
     }
 }

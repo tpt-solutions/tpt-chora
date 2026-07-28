@@ -4,8 +4,6 @@ use std::fmt::Write;
 pub enum DoctorError {
     #[error("wgpu: {0}")]
     Wgpu(String),
-    #[error("toolchain: {0}")]
-    Toolchain(String),
 }
 
 pub fn run() -> Result<(), DoctorError> {
@@ -35,17 +33,31 @@ fn report_toolchain() {
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_else(|e| format!("(unable to run: {e})"))
     );
-    println!("  target: {}", std::env::var("TARGET").unwrap_or_else(|_| std::env::consts::ARCH.to_string()));
-    println!("  host: {}", std::env::var("HOST").unwrap_or_else(|_| {
-        #[cfg(target_os = "windows")]
-        { "x86_64-pc-windows-msvc".to_string() }
-        #[cfg(target_os = "macos")]
-        { "aarch64-apple-darwin".to_string() }
-        #[cfg(target_os = "linux")]
-        { "x86_64-unknown-linux-gnu".to_string() }
-        #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-        { std::env::consts::ARCH.to_string() }
-    }));
+    println!(
+        "  target: {}",
+        std::env::var("TARGET").unwrap_or_else(|_| std::env::consts::ARCH.to_string())
+    );
+    println!(
+        "  host: {}",
+        std::env::var("HOST").unwrap_or_else(|_| {
+            #[cfg(target_os = "windows")]
+            {
+                "x86_64-pc-windows-msvc".to_string()
+            }
+            #[cfg(target_os = "macos")]
+            {
+                "aarch64-apple-darwin".to_string()
+            }
+            #[cfg(target_os = "linux")]
+            {
+                "x86_64-unknown-linux-gnu".to_string()
+            }
+            #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+            {
+                std::env::consts::ARCH.to_string()
+            }
+        })
+    );
 
     let rustup_host = std::env::var("HOST").unwrap_or_default();
     let target = std::env::var("TARGET").unwrap_or_default();
@@ -80,7 +92,9 @@ fn report_gpu() {
                         force_fallback_adapter: true,
                     })
                     .await
-                    .ok_or_else(|| DoctorError::Wgpu("no adapter found (hardware or software)".into()))?;
+                    .ok_or_else(|| {
+                        DoctorError::Wgpu("no adapter found (hardware or software)".into())
+                    })?;
                 (fallback, true)
             }
         };
@@ -97,7 +111,11 @@ fn report_gpu() {
         writeln!(out, "  adapter_name: {}", info.name).unwrap();
 
         if is_fallback {
-            writeln!(out, "  warning: using Tier 1 software-fallback adapter (no hardware GPU found)").unwrap();
+            writeln!(
+                out,
+                "  warning: using Tier 1 software-fallback adapter (no hardware GPU found)"
+            )
+            .unwrap();
         } else {
             writeln!(out, "  tier: hardware (Tier 3)").unwrap();
         }

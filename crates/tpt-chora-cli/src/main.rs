@@ -18,20 +18,16 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     Doctor,
-    New {
-        name: String,
-    },
-    CssReport {
-        path: String,
-    },
+    New { name: String },
+    CssReport { path: String },
 }
 
 fn main() {
     let cli = Cli::parse();
-    let result = match cli.command {
-        Commands::Doctor => doctor::run(),
-        Commands::New { name } => new_app::run(&name),
-        Commands::CssReport { path } => css_report::run(&path),
+    let result: Result<(), Box<dyn std::error::Error>> = match cli.command {
+        Commands::Doctor => doctor::run().map_err(Into::into),
+        Commands::New { name } => new_app::run(&name).map_err(Into::into),
+        Commands::CssReport { path } => css_report::run(&path).map_err(Into::into),
     };
     if let Err(e) = result {
         eprintln!("error: {e}");
