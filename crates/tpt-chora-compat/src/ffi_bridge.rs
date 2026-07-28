@@ -13,7 +13,7 @@ const FUEL_PER_CALL: u64 = 50_000_000;
 /// filesystem/network; this bounds how much host memory it can claim via
 /// `memory.grow`, so it can't OOM the host process either.
 const MAX_MEMORY_BYTES: usize = 256 * 1024 * 1024;
-const MAX_TABLE_ELEMENTS: u32 = 10_000;
+const MAX_TABLE_ELEMENTS: usize = 10_000;
 
 pub struct FfiBridge {
     engine: Engine,

@@ -179,53 +179,100 @@ allocates real GPU buffers but resolves hits via a plain CPU `HashMap` scan
 security hardening and adoption-tooling gaps found in the same review.
 
 ### Spatial render-graph honesty fixes
-- [ ] Replace `create_stereo_node`'s zero-index placeholder vertex/index
+- [x] Replace `create_stereo_node`'s zero-index placeholder vertex/index
   buffers with real, nonzero geometry (`crates/tpt-chora-render/src/spatial.rs`)
-- [ ] Make `create_foveation_node` use its computed `FoveationLevel` to drive
-  an actual decision (e.g. size a shadow-map resource via
-  `get_shadow_map_size`) instead of computing and discarding it
-  (`crates/tpt-chora-render/src/spatial.rs`)
-- [ ] Wire `create_stereo_node`/`create_foveation_node`/`create_volumetric_node`
+- [x] Make `create_foveation_node` use its computed `FoveationLevel` to drive
+  an actual decision (sizes a shadow-map resource via `get_shadow_map_size`)
+  instead of computing and discarding it (`crates/tpt-chora-render/src/spatial.rs`)
+- [x] Wire `create_stereo_node`/`create_foveation_node`/`create_volumetric_node`
   into the `tpt-chora-all-subsystems` demo (behind the existing `spatial`
-  feature) and add render-graph execution tests for all three (currently zero
-  tests in `spatial.rs`)
+  feature) and add render-graph execution tests for all three
+  (`crates/tpt-chora-render/src/spatial.rs`, `crates/tpt-chora-all-subsystems/all_subsystems.rs`)
+- [x] Found while wiring the above in: `create_volumetric_node` aliased its
+  color `scene_color` view as both the color *and* depth binding in
+  `VolumetricLightPipeline`'s bind group, a sample-type mismatch that would
+  fail bind-group validation the first time the node actually ran; it now
+  produces its own `Depth32Float` resource for the depth binding, and its
+  output texture format is hardcoded to `Rgba16Float` to match the
+  pipeline's fixed storage-texture binding (`crates/tpt-chora-render/src/spatial.rs`)
 
 ### GPU hit-testing
-- [ ] Give `GpuHitTest::hit_test_gpu` a real compute-shader dispatch against
-  the already-allocated `bvh_buffer`/`depth_buffer`/`hit_results_buffer`
-  instead of scanning `node_map` on the CPU; keep `hit_test_2d`'s CPU tree
-  traversal as the deliberate, honestly-named CPU path
-  (`crates/tpt-chora-input/src/hit_test.rs`)
-- [ ] Add tests exercising `hit_test_gpu` against a `new_from_gpu`-constructed
-  instance (existing tests only cover the CPU-only `GpuHitTest::new()` path)
+- [x] Give `GpuHitTest::hit_test_gpu` a real compute-shader dispatch
+  (`shaders/hit_test.wgsl`, one thread per BVH leaf) against the
+  already-allocated `bvh_buffer`/`hit_results_buffer` instead of scanning
+  `node_map` on the CPU; kept `hit_test_2d`'s CPU tree traversal as the
+  deliberate, honestly-named CPU path (`crates/tpt-chora-input/src/hit_test.rs`)
+- [x] Add tests exercising `hit_test_gpu` against a `new_from_gpu`-constructed
+  instance
 
 ### Security hardening
-- [ ] Bound `FfiBridge::call_function` execution: enable `wasmtime` fuel
-  consumption and set a per-call fuel budget so a spinning untrusted Wasm
-  module traps instead of hanging the host (`crates/tpt-chora-compat/src/ffi_bridge.rs`)
-- [ ] Install a `wasmtime::ResourceLimiter`/`StoreLimits` capping
-  memory/table growth so untrusted Wasm can't OOM the host process
-  (`crates/tpt-chora-compat/src/ffi_bridge.rs`)
-- [ ] Validate `tpt-chora new <name>` rejects path separators/`..`/absolute
+- [x] Bound `FfiBridge::call_function` execution: `wasmtime` fuel
+  consumption is enabled and a per-call fuel budget traps a spinning
+  untrusted Wasm module instead of hanging the host (`crates/tpt-chora-compat/src/ffi_bridge.rs`)
+- [x] Install a `wasmtime::StoreLimits` capping memory/table growth so
+  untrusted Wasm can't OOM the host process (`crates/tpt-chora-compat/src/ffi_bridge.rs`)
+- [x] Validate `tpt-chora new <name>` rejects path separators/`..`/absolute
   paths before using `name` in filesystem paths and generated file contents
   (`crates/tpt-chora-cli/src/new_app.rs`)
-- [ ] Add `deny.toml` and a `cargo-deny` CI step for supply-chain
-  vulnerability/license scanning (currently nothing scans `Cargo.lock`'s 379
-  packages, including `wasmtime`)
+- [x] Add `deny.toml` and a `cargo-deny` CI step for supply-chain
+  vulnerability/license scanning
+- [x] **Found by the new `cargo deny check`**: the pinned `wasmtime = "24"`
+  had six open RustSec advisories, including multiple Wasm-sandbox-escape
+  vulnerabilities (RUSTSEC-2026-0086/0088/0089/0094/0095/0096). Bumped to
+  `wasmtime = "43"` (`crates/tpt-chora-compat/Cargo.toml`)
+- [x] **Found while smoke-testing the fixes above**: `RenderGraph::execute`'s
+  security guard validated every node's texture reads/writes against
+  `CapabilityGuard` but nothing ever granted access — every call to
+  `Renderer::render_frame` failed, including the Phase 1 milestone example
+  (`cargo run -p tpt-chora-render --example triangle_and_path`). A node is
+  now implicitly granted access to the resources it `creates` before
+  validation runs (`crates/tpt-chora-render/src/graph.rs`,
+  `src/security/capability.rs` — `CapabilityGuard`'s granted-resource sets
+  moved behind `RefCell` so the grant can happen through the `&SecurityContext`
+  shared reference `RenderGraph::execute` already receives)
 
 ### CI and docs
-- [ ] Get `cargo test --workspace` running in CI (install Mesa software
+- [x] Get `cargo test --workspace` running in CI (install Mesa software
   Vulkan driver so wgpu's existing adapter fallback picks up lavapipe on
-  `ubuntu-latest`) — currently CI only runs `fmt`/`clippy`/`build`
+  `ubuntu-latest`) — CI previously only ran `fmt`/`clippy`/`build`
   (`.github/workflows/ci.yml`)
-- [ ] Rewrite `README.md` to list all 12 workspace crates (not just
+- [x] Rewrite `README.md` to list all 12 workspace crates (not just
   `tpt-chora-render`) and document `tpt-chora-cli` usage
-- [ ] Update `AGENTS.md`/`CHANGELOG.md` to reflect current crate/phase state
-  (both still describe "Phase 1, one crate")
+- [x] Update `AGENTS.md`/`CHANGELOG.md` to reflect current crate/phase state
 
 ### Adoption tooling
-- [ ] Add a `tpt-chora completions <shell>` subcommand (`clap_complete`,
+- [x] Add a `tpt-chora completions <shell>` subcommand (`clap_complete`,
   bash/zsh/fish/powershell) (`crates/tpt-chora-cli/src/main.rs`)
-- [ ] Add a `tpt-chora preview <project-dir>` dev-loop command combining
+- [x] Add a `tpt-chora preview <project-dir>` dev-loop command combining
   `tpt_chora_inspector::HotReloader` with `tpt_chora_render::Renderer` to
   re-render a PNG snapshot on every file change (`crates/tpt-chora-cli`)
+- [x] **Milestone:** `cargo fmt --all -- --check`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, `cargo build --workspace --all-targets`,
+  `cargo test --workspace --all-targets` (166 tests), and `cargo deny check`
+  all pass clean; `triangle_and_path`, `all_subsystems_demo`, and
+  `tpt-chora preview` all produce real rendered PNG output.
+
+## Phase 18: Runtime Benchmarking & Performance Proof
+- [ ] Add new workspace crate `crates/tpt-chora-bench` (add to `Cargo.toml`
+  members) using `criterion` for statistical benchmarking
+- [ ] Bezier tessellation throughput benchmark: tessellate 10k/50k/100k cubic
+  Bezier curves via the existing compute-shader path
+  (`crates/tpt-chora-render/src/vector.rs`, `src/shaders/tessellate.wgsl`),
+  reporting curves/sec and GPU dispatch time via the existing
+  `gpu_timing.rs` instrumentation (`crates/tpt-chora-inspector/src/gpu_timing.rs`)
+- [ ] Frame pacing benchmark: drive `Renderer::render_frame` in a loop over
+  `FrameBufferSet` (`crates/tpt-chora-render/src/framebuffer.rs`) and report
+  mean/p95/p99 frame times
+- [ ] Zero-allocation steady-state proof: wrap the steady-state render loop
+  with a counting/dhat allocator (behind a `dhat-heap` feature) and assert
+  zero heap growth after warmup, turning the Phase 9 manual audit claim into
+  an automated, CI-checkable test
+- [ ] Zero-copy ingestion benchmark: exercise the `ArchonBackend` stub
+  (`crates/tpt-chora-runtime/src/archon_stub.rs`) to measure
+  `bind_state_to_gpu` throughput/latency for representative payload sizes
+- [ ] Wire `cargo bench -p tpt-chora-bench` into CI
+  (`.github/workflows/ci.yml`) as a threshold-gated job so render-graph
+  refactors get an automatic performance regression signal
+- [ ] **Milestone:** `cargo bench -p tpt-chora-bench` runs locally and in CI,
+  producing tessellation throughput, frame-time percentiles, and a
+  zero-allocation report for the 10k/50k/100k curve counts.

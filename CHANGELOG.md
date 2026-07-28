@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `tpt-chora-render`: `RenderGraph::execute`'s security guard validated
+  every node's texture reads/writes against `CapabilityGuard` but nothing
+  ever granted access in the first place — every render call (including
+  the Phase 1 milestone example, `triangle_and_path`) failed with
+  `SecurityViolation("component 0 denied access to texture ...")`. A node
+  is now implicitly granted access to the resources it `creates` before
+  validation runs, matching the intended "producer owns what it makes"
+  model (`crates/tpt-chora-render/src/graph.rs`,
+  `src/security/capability.rs`).
+- `tpt-chora-compat`: bumped `wasmtime` from 24.0.11 to 43.x — the pinned
+  24.0.11 had six open RustSec advisories including multiple Wasm-sandbox
+  escapes (RUSTSEC-2026-0086/0088/0089/0094/0095/0096), caught by the new
+  `cargo deny check` CI job.
+
 ### Added
 - `tpt-chora-render`: `spatial` feature nodes (`create_stereo_node`,
   `create_foveation_node`, `create_volumetric_node`) now render real,

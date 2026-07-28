@@ -36,6 +36,11 @@ confidence-threshold = 0.8
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# Internal workspace crates reference each other via path deps with no
+# version requirement (e.g. tpt-chora-all-subsystems's Cargo.toml) — these
+# are pinned by the workspace itself, not a real "any version" supply-chain
+# risk, so don't count them against `wildcards = "deny"`.
+allow-wildcard-paths = true
 
 [sources]
 unknown-registry = "deny"

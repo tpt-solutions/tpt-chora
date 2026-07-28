@@ -206,6 +206,16 @@ impl RenderGraph {
         for &i in &order {
             if let Some(sec) = security {
                 let node = &self.nodes[i];
+                // A node is implicitly granted access to the resources it
+                // creates (it's their producer/owner for this frame) before
+                // its — or any later node's — reads/writes are validated,
+                // so a downstream node can legitimately read what an
+                // earlier node in the same graph produced.
+                for (id, _) in &node.creates {
+                    sec.capability
+                        .grant_texture(id.0.as_ptr() as u64)
+                        .map_err(|e| RenderError::SecurityViolation(e.to_string()))?;
+                }
                 let texture_ids: Vec<u64> = node
                     .reads
                     .iter()
