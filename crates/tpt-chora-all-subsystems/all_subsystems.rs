@@ -83,6 +83,62 @@ fn main() {
         );
     }
 
+    // Actually run the stereo/foveation/volumetric-fog render-graph nodes
+    // (`tpt_chora_render::spatial`), not just construct the underlying
+    // `tpt-chora-spatial` types above — this is what makes the "full
+    // end-to-end demo exercising every subsystem" claim true for the
+    // spatial render-graph integration.
+    {
+        use tpt_chora_render::graph::{GraphNode, NodeExecuteCtx, RenderGraph, ResourceId};
+        use tpt_chora_render::spatial::{
+            create_foveation_node, create_stereo_node, create_volumetric_node,
+            FOVEATION_SHADOW_MAP, STEREO_LEFT, STEREO_RIGHT, VOLUMETRIC_OUTPUT,
+        };
+
+        let mut graph = RenderGraph::new();
+        graph.add_node(
+            GraphNode::new("scene", |ctx: &mut NodeExecuteCtx<'_>| {
+                let _ = &ctx.resources[&ResourceId("scene_color")];
+            })
+            .creates(
+                ResourceId("scene_color"),
+                tpt_chora_render::TransientTextureDesc {
+                    width,
+                    height,
+                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                        | wgpu::TextureUsages::TEXTURE_BINDING,
+                },
+            ),
+        );
+        graph.add_node(create_stereo_node(
+            width,
+            height,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+        ));
+        graph.add_node(create_foveation_node(width as f32, height as f32));
+        graph.add_node(create_volumetric_node(width, height));
+        graph
+            .execute(&ctx.device, &ctx.queue, None)
+            .expect("spatial render-graph nodes execute");
+        println!(
+            "  Spatial render graph: stereo={}x{} (L/R), foveation shadow map={}x{}, volumetric output ready",
+            width,
+            height,
+            graph
+                .texture(FOVEATION_SHADOW_MAP)
+                .map(|t| t.size().width)
+                .unwrap_or(0),
+            graph
+                .texture(FOVEATION_SHADOW_MAP)
+                .map(|t| t.size().height)
+                .unwrap_or(0),
+        );
+        assert!(graph.texture(STEREO_LEFT).is_some());
+        assert!(graph.texture(STEREO_RIGHT).is_some());
+        assert!(graph.texture(VOLUMETRIC_OUTPUT).is_some());
+    }
+
     println!("\n[Phase 4] Input & Interaction Engine");
     let _input_state = InputState::default();
     let mut bvh = BoundingBoxHierarchy::new();

@@ -1,4 +1,19 @@
-use wasmtime::{Engine, Instance, Linker, Module, Store, Val, ValType};
+use wasmtime::{
+    Config, Engine, Instance, Linker, Module, Store, StoreLimits, StoreLimitsBuilder, Val, ValType,
+};
+
+/// Fuel budget granted to each `call_function` invocation. `wasmtime`
+/// counts down from this on every executed instruction (roughly); a
+/// spinning or infinite-looping untrusted module traps with "all fuel
+/// consumed" once it's exhausted, instead of hanging the host thread.
+const FUEL_PER_CALL: u64 = 50_000_000;
+
+/// Per-module linear memory cap. `register_module`'s `Linker` is empty (no
+/// host imports), so an untrusted module already can't reach the host
+/// filesystem/network; this bounds how much host memory it can claim via
+/// `memory.grow`, so it can't OOM the host process either.
+const MAX_MEMORY_BYTES: usize = 256 * 1024 * 1024;
+const MAX_TABLE_ELEMENTS: u32 = 10_000;
 
 pub struct FfiBridge {
     engine: Engine,
@@ -7,7 +22,7 @@ pub struct FfiBridge {
 
 struct LoadedModule {
     info: WasmModule,
-    store: Store<()>,
+    store: Store<StoreLimits>,
     instance: Instance,
 }
 
@@ -21,8 +36,11 @@ pub struct WasmModule {
 
 impl FfiBridge {
     pub fn new() -> Self {
+        let mut config = Config::new();
+        config.consume_fuel(true);
+        let engine = Engine::new(&config).expect("fuel-metering config is always valid");
         Self {
-            engine: Engine::default(),
+            engine,
             modules: Vec::new(),
         }
     }
@@ -35,7 +53,16 @@ impl FfiBridge {
         let module = Module::new(&self.engine, data)
             .map_err(|e| crate::CompatError::WasmLoadFailed(e.to_string()))?;
 
-        let mut store = Store::new(&self.engine, ());
+        let limits = StoreLimitsBuilder::new()
+            .memory_size(MAX_MEMORY_BYTES)
+            .table_elements(MAX_TABLE_ELEMENTS)
+            .build();
+        let mut store = Store::new(&self.engine, limits);
+        store.limiter(|limits| limits);
+        store
+            .set_fuel(FUEL_PER_CALL)
+            .expect("fuel consumption is enabled on this engine");
+
         let linker = Linker::new(&self.engine);
         let instance = linker
             .instantiate(&mut store, &module)
@@ -103,9 +130,24 @@ impl FfiBridge {
             )));
         }
 
+        // Refill fuel for this call so a prior call's consumption doesn't
+        // starve a later, unrelated call on the same module instance.
+        loaded
+            .store
+            .set_fuel(FUEL_PER_CALL)
+            .expect("fuel consumption is enabled on this engine");
+
         let mut results = vec![Val::I32(0); ty.results().len()];
         func.call(&mut loaded.store, &params, &mut results)
             .map_err(|e| {
+                if let Some(trap) = e.downcast_ref::<wasmtime::Trap>() {
+                    if *trap == wasmtime::Trap::OutOfFuel {
+                        return crate::CompatError::ResourceLimitExceeded(format!(
+                            "'{}' exceeded its fuel budget ({} units) — likely an infinite loop",
+                            function, FUEL_PER_CALL
+                        ));
+                    }
+                }
                 crate::CompatError::FfiError(format!("call to '{}' failed: {}", function, e))
             })?;
 
@@ -217,5 +259,38 @@ mod tests {
         let mut bridge = FfiBridge::new();
         let id = bridge.register_module("add-mod".into(), ADD_WASM).unwrap();
         assert!(bridge.call_function(id, "add", &[1, 2, 3]).is_err());
+    }
+
+    const SPIN_WAT: &str = r#"
+        (module
+          (func (export "spin")
+            (loop
+              br 0)))
+    "#;
+
+    #[test]
+    fn call_function_traps_on_fuel_exhaustion() {
+        let mut bridge = FfiBridge::new();
+        let id = bridge
+            .register_module("spin-mod".into(), SPIN_WAT.as_bytes())
+            .unwrap();
+
+        let err = bridge.call_function(id, "spin", &[]).unwrap_err();
+        assert!(
+            matches!(err, crate::CompatError::ResourceLimitExceeded(_)),
+            "expected a resource-limit error for an infinite loop, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn register_module_rejects_oversized_memory_request() {
+        // Declares a 100,000-page (~6.4 GiB) minimum memory, far past
+        // `MAX_MEMORY_BYTES`; the `StoreLimits` memory cap must reject this
+        // at instantiation instead of letting the host allocate it.
+        let wat = r#"(module (memory (export "memory") 100000))"#;
+        let mut bridge = FfiBridge::new();
+        assert!(bridge
+            .register_module("huge-mem".into(), wat.as_bytes())
+            .is_err());
     }
 }

@@ -8,9 +8,9 @@ rust-version.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-readme.workspace = true
-keywords.workspace = true
-categories.workspace = true
+readme = "README.md"
+keywords = ["gpu", "wgpu", "rendering", "vector-graphics", "tessellation"]
+categories = ["graphics", "rendering", "rendering::engine"]
 
 [dependencies]
 wgpu = "0.19"

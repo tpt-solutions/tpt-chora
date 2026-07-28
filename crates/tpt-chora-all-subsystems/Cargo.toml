@@ -4,13 +4,14 @@ description = "Phase 14 milestone: full end-to-end demo exercising every tpt-cho
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 
 [[bin]]
 name = "all_subsystems_demo"
 path = "all_subsystems.rs"
 
 [dependencies]
-tpt-chora-render = { workspace = true }
+tpt-chora-render = { workspace = true, features = ["spatial"] }
 tpt-chora-text = { path = "../tpt-chora-text" }
 tpt-chora-spatial = { path = "../tpt-chora-spatial" }
 tpt-chora-input = { path = "../tpt-chora-input" }

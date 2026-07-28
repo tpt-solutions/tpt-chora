@@ -8,9 +8,9 @@ rust-version.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-readme.workspace = true
-keywords.workspace = true
-categories.workspace = true
+readme = "README.md"
+keywords = ["cli", "scaffolding", "diagnostics", "css", "doctor"]
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
 name = "tpt-chora"
@@ -18,8 +18,11 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
+clap_complete = "4.5"
 wgpu = "0.19"
 pollster = "0.3"
 thiserror = "1.0"
+png = "0.17"
 tpt-chora-render = { workspace = true }
 tpt-chora-compat = { workspace = true }
+tpt-chora-inspector = { workspace = true }

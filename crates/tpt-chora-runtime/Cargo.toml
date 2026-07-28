@@ -8,9 +8,9 @@ rust-version.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-readme.workspace = true
-keywords.workspace = true
-categories.workspace = true
+readme = "README.md"
+keywords = ["integration", "ffi", "zero-copy", "gpu", "bindings"]
+categories = ["api-bindings", "rendering"]
 
 [dependencies]
 tpt-chora-render = { workspace = true }

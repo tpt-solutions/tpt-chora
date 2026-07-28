@@ -8,9 +8,9 @@ rust-version.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-readme.workspace = true
-keywords.workspace = true
-categories.workspace = true
+readme = "README.md"
+keywords = ["html", "css", "transpiler", "wasm", "web-component"]
+categories = ["wasm", "web-programming"]
 
 [dependencies]
 thiserror = "1.0"

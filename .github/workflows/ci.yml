@@ -23,7 +23,22 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Build
-        # GPU-executing tests/examples need a Vulkan adapter (hardware or
-        # llvmpipe/lavapipe); until Phase 11's software-rasterizer fallback
-        # is wired into CI, just prove the workspace builds here.
         run: cargo build --workspace --all-targets
+      - name: Install software Vulkan driver (lavapipe)
+        # GPU-executing tests/examples need a Vulkan adapter; the runner has
+        # no hardware GPU, so install Mesa's software (llvmpipe/lavapipe)
+        # ICD and let wgpu's existing force_fallback_adapter path pick it up.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools libgl1-mesa-dri
+      - name: Test
+        run: cargo test --workspace --all-targets
+      - name: Test (spatial feature)
+        run: cargo test -p tpt-chora-render --features spatial
+
+  supply-chain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo-deny (advisories, licenses, sources)
+        uses: EmbarkStudios/cargo-deny-action@v2

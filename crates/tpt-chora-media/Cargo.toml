@@ -8,9 +8,9 @@ rust-version.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-readme.workspace = true
-keywords.workspace = true
-categories.workspace = true
+readme = "README.md"
+keywords = ["media", "image", "video", "decoding", "asset-streaming"]
+categories = ["multimedia", "multimedia::images", "multimedia::video"]
 
 [dependencies]
 wgpu = "0.19"

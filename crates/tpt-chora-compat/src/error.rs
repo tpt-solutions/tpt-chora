@@ -10,4 +10,6 @@ pub enum CompatError {
     WasmLoadFailed(String),
     #[error("FFI bridge error: {0}")]
     FfiError(String),
+    #[error("Wasm module exceeded its resource budget: {0}")]
+    ResourceLimitExceeded(String),
 }

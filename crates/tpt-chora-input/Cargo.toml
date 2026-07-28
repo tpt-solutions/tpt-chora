@@ -8,9 +8,9 @@ rust-version.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-readme.workspace = true
-keywords.workspace = true
-categories.workspace = true
+readme = "README.md"
+keywords = ["input", "hit-testing", "gesture", "haptics", "gaze"]
+categories = ["gui", "hardware-support"]
 
 [dependencies]
 wgpu = "0.19"
@@ -18,3 +18,6 @@ bytemuck = { version = "1.14", features = ["derive"] }
 thiserror = "1.0"
 glam = "0.25"
 bitflags = "2"
+
+[dev-dependencies]
+pollster = "0.3"

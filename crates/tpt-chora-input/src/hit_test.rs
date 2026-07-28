@@ -17,6 +17,78 @@ pub struct GpuHitTest {
     bvh_buffer: Option<wgpu::Buffer>,
     hit_results_buffer: Option<wgpu::Buffer>,
     node_map: HashMap<u64, (u32, [f32; 4])>,
+    node_count: u32,
+    compute: Option<GpuHitTestPipeline>,
+}
+
+/// The compiled compute pipeline used by [`GpuHitTest::hit_test_gpu`] to
+/// test every BVH leaf's bounding box against a query point in parallel on
+/// the GPU, one thread per node.
+struct GpuHitTestPipeline {
+    pipeline: wgpu::ComputePipeline,
+    bind_group_layout: wgpu::BindGroupLayout,
+}
+
+impl GpuHitTestPipeline {
+    fn new(device: &wgpu::Device) -> Self {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("chora-hit-test-shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/hit_test.wgsl").into()),
+        });
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("chora-hit-test-bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("chora-hit-test-pl"),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("chora-hit-test-pipeline"),
+            layout: Some(&pipeline_layout),
+            module: &shader,
+            entry_point: "hit_test",
+        });
+
+        Self {
+            pipeline,
+            bind_group_layout,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -35,6 +107,8 @@ impl GpuHitTest {
             bvh_buffer: None,
             hit_results_buffer: None,
             node_map: HashMap::new(),
+            node_count: 0,
+            compute: None,
         }
     }
 
@@ -45,12 +119,20 @@ impl GpuHitTest {
         height: u32,
     ) -> Self {
         let flat_nodes = bvh.flatten();
+        let node_count = flat_nodes.len() as u32;
+
+        // Packed as a GPU-friendly, 16-byte-aligned `BvhNode` struct (see
+        // `shaders/hit_test.wgsl`): `idx`, `node_id` split into `id_lo`/
+        // `id_hi` (WGSL has no native u64), a padding word, then `bounds`
+        // as a `vec4<f32>`.
         let bvh_data: Vec<u8> = flat_nodes
             .iter()
             .flat_map(|(idx, bounds, node_id)| {
-                let mut data = Vec::new();
+                let mut data = Vec::with_capacity(32);
                 data.extend_from_slice(&(*idx as u32).to_le_bytes());
-                data.extend_from_slice(&node_id.to_le_bytes());
+                data.extend_from_slice(&(*node_id as u32).to_le_bytes());
+                data.extend_from_slice(&((*node_id >> 32) as u32).to_le_bytes());
+                data.extend_from_slice(&0u32.to_le_bytes());
                 data.extend_from_slice(&bounds[0].to_le_bytes());
                 data.extend_from_slice(&bounds[1].to_le_bytes());
                 data.extend_from_slice(&bounds[2].to_le_bytes());
@@ -58,6 +140,14 @@ impl GpuHitTest {
                 data
             })
             .collect();
+        // A zero-node BVH would create a zero-sized storage buffer, which
+        // wgpu rejects; keep a single dummy (all-zero, never matched by a
+        // real node_count of 0 in the dispatch) entry in that case.
+        let bvh_data = if bvh_data.is_empty() {
+            vec![0u8; 32]
+        } else {
+            bvh_data
+        };
 
         let bvh_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("chora-gpu-bvh"),
@@ -74,8 +164,8 @@ impl GpuHitTest {
 
         let hit_results_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("chora-gpu-hit-results"),
-            size: (std::mem::size_of::<u32>() * 4 * 64) as u64,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            size: (std::mem::size_of::<u32>() * 4 * node_count.max(1) as usize) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
 
@@ -89,6 +179,8 @@ impl GpuHitTest {
             bvh_buffer: Some(bvh_buffer),
             hit_results_buffer: Some(hit_results_buffer),
             node_map,
+            node_count,
+            compute: Some(GpuHitTestPipeline::new(device)),
         }
     }
 
@@ -96,25 +188,106 @@ impl GpuHitTest {
         bvh.query_point(x, y)
     }
 
-    pub fn hit_test_gpu(&self, x: f32, y: f32, _width: u32, _height: u32) -> Option<HitResult> {
-        self.bvh_buffer.as_ref()?;
+    /// Dispatches the hit-test compute shader (one thread per BVH leaf)
+    /// against the GPU buffers built by [`Self::new_from_gpu`], reads back
+    /// per-node results, and picks the smallest-area match — the same
+    /// "closest/smallest wins" tie-break `hit_test_2d`'s tree traversal
+    /// uses, just computed by a parallel GPU scan instead of a CPU tree
+    /// walk.
+    pub fn hit_test_gpu(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        x: f32,
+        y: f32,
+    ) -> Option<HitResult> {
+        let bvh_buffer = self.bvh_buffer.as_ref()?;
+        let hit_results_buffer = self.hit_results_buffer.as_ref()?;
+        let compute = self.compute.as_ref()?;
+        if self.node_count == 0 {
+            return None;
+        }
 
+        let mut query_data = Vec::with_capacity(16);
+        query_data.extend_from_slice(&x.to_le_bytes());
+        query_data.extend_from_slice(&y.to_le_bytes());
+        query_data.extend_from_slice(&self.node_count.to_le_bytes());
+        query_data.extend_from_slice(&0u32.to_le_bytes());
+        let query_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("chora-hit-test-query"),
+            contents: &query_data,
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("chora-hit-test-bg"),
+            layout: &compute.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: query_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: bvh_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: hit_results_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let result_size = (std::mem::size_of::<u32>() * 4 * self.node_count as usize) as u64;
+        let staging_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("chora-hit-test-staging"),
+            size: result_size,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("chora-hit-test-encoder"),
+        });
+        {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("chora-hit-test-pass"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&compute.pipeline);
+            pass.set_bind_group(0, &bind_group, &[]);
+            pass.dispatch_workgroups(self.node_count.div_ceil(64), 1, 1);
+        }
+        encoder.copy_buffer_to_buffer(hit_results_buffer, 0, &staging_buf, 0, result_size);
+        queue.submit(std::iter::once(encoder.finish()));
+
+        let slice = staging_buf.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = tx.send(result);
+        });
+        device.poll(wgpu::Maintain::Wait);
+        rx.recv().ok()?.ok()?;
+
+        let data = slice.get_mapped_range();
         let mut closest: Option<HitResult> = None;
         let mut closest_area = f32::MAX;
+        for chunk in data.chunks_exact(16) {
+            let hit = u32::from_le_bytes(chunk[0..4].try_into().unwrap());
+            if hit == 0 {
+                continue;
+            }
+            let id_lo = u32::from_le_bytes(chunk[4..8].try_into().unwrap());
+            let id_hi = u32::from_le_bytes(chunk[8..12].try_into().unwrap());
+            let node_id = (id_lo as u64) | ((id_hi as u64) << 32);
+            let area = f32::from_bits(u32::from_le_bytes(chunk[12..16].try_into().unwrap()));
 
-        for (&node_id, &(_idx, bounds)) in &self.node_map {
-            if x >= bounds[0] && x <= bounds[2] && y >= bounds[1] && y <= bounds[3] {
-                let area = (bounds[2] - bounds[0]) * (bounds[3] - bounds[1]);
-                let center_x = (bounds[0] + bounds[2]) * 0.5;
-                let center_y = (bounds[1] + bounds[3]) * 0.5;
-                let dist_to_center = ((x - center_x).powi(2) + (y - center_y).powi(2)).sqrt();
-
-                let depth = dist_to_center + area.log2();
-                if area < closest_area {
+            if area < closest_area {
+                if let Some(&(_idx, bounds)) = self.node_map.get(&node_id) {
                     closest_area = area;
                     closest = Some(HitResult {
                         node_id,
-                        depth,
+                        depth: area,
                         x,
                         y,
                         bounding_box: bounds,
@@ -122,6 +295,8 @@ impl GpuHitTest {
                 }
             }
         }
+        drop(data);
+        staging_buf.unmap();
 
         closest
     }
@@ -502,5 +677,92 @@ mod tests {
         bvh.build_tree();
         let gpu = GpuHitTest::new();
         assert!(gpu.hit_test_2d(50.0, 50.0, &bvh).is_none());
+    }
+
+    fn headless_device() -> (wgpu::Device, wgpu::Queue) {
+        pollster::block_on(async {
+            let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+            let adapter = match instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::default(),
+                    compatible_surface: None,
+                    force_fallback_adapter: false,
+                })
+                .await
+            {
+                Some(a) => a,
+                None => instance
+                    .request_adapter(&wgpu::RequestAdapterOptions {
+                        power_preference: wgpu::PowerPreference::default(),
+                        compatible_surface: None,
+                        force_fallback_adapter: true,
+                    })
+                    .await
+                    .expect("no wgpu adapter available"),
+            };
+            adapter
+                .request_device(
+                    &wgpu::DeviceDescriptor {
+                        label: Some("chora-input-test-device"),
+                        required_features: wgpu::Features::empty(),
+                        required_limits: wgpu::Limits::default(),
+                    },
+                    None,
+                )
+                .await
+                .expect("failed to create device")
+        })
+    }
+
+    #[test]
+    fn gpu_hit_test_dispatches_real_compute_and_hits() {
+        let (device, queue) = headless_device();
+
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 10.0, 10.0], 42);
+        bvh.insert([100.0, 100.0, 110.0, 110.0], 7);
+        bvh.build_tree();
+
+        let gpu = GpuHitTest::new_from_gpu(&device, &bvh, 256, 256);
+        let result = gpu
+            .hit_test_gpu(&device, &queue, 3.0, 3.0)
+            .expect("expected a GPU hit");
+        assert_eq!(result.node_id, 42);
+    }
+
+    #[test]
+    fn gpu_hit_test_miss_returns_none() {
+        let (device, queue) = headless_device();
+
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 10.0, 10.0], 42);
+        bvh.build_tree();
+
+        let gpu = GpuHitTest::new_from_gpu(&device, &bvh, 256, 256);
+        assert!(gpu.hit_test_gpu(&device, &queue, 500.0, 500.0).is_none());
+    }
+
+    #[test]
+    fn gpu_hit_test_picks_smallest_overlapping_area() {
+        let (device, queue) = headless_device();
+
+        let mut bvh = BoundingBoxHierarchy::new();
+        bvh.insert([0.0, 0.0, 20.0, 20.0], 1);
+        bvh.insert([2.0, 2.0, 8.0, 8.0], 2);
+        bvh.build_tree();
+
+        let gpu = GpuHitTest::new_from_gpu(&device, &bvh, 256, 256);
+        let result = gpu
+            .hit_test_gpu(&device, &queue, 4.0, 4.0)
+            .expect("expected a GPU hit");
+        assert_eq!(result.node_id, 2);
+    }
+
+    #[test]
+    fn gpu_hit_test_empty_bvh_returns_none() {
+        let (device, queue) = headless_device();
+        let bvh = BoundingBoxHierarchy::new();
+        let gpu = GpuHitTest::new_from_gpu(&device, &bvh, 256, 256);
+        assert!(gpu.hit_test_gpu(&device, &queue, 1.0, 1.0).is_none());
     }
 }

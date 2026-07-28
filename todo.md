@@ -165,3 +165,67 @@ present in source but did not actually compile; fixed as part of this pass:
   it): three `GraphNode` closures were missing the closing `|` on their param
   list (`move |ctx: &mut NodeExecuteCtx<'_> {` — a parse error), and the module
   used `glam` without declaring it as a (feature-gated, optional) dependency.
+
+## Phase 17: Second Honesty Pass, Security Hardening & Adoption Tooling (2026-07-28 audit findings)
+
+A follow-up review found the Phase 15 "wired into the render graph" claim for
+`spatial.rs` was still not true in practice: `create_stereo_node`,
+`create_foveation_node`, and `create_volumetric_node` had zero callers
+anywhere in the workspace (not even in `tpt-chora-all-subsystems`, the
+"exercises every subsystem" demo) and no tests; `create_stereo_node` drew a
+zero-index placeholder buffer. Separately, `GpuHitTest::hit_test_gpu`
+allocates real GPU buffers but resolves hits via a plain CPU `HashMap` scan
+— the GPU buffers are never dispatched against. This phase also covers
+security hardening and adoption-tooling gaps found in the same review.
+
+### Spatial render-graph honesty fixes
+- [ ] Replace `create_stereo_node`'s zero-index placeholder vertex/index
+  buffers with real, nonzero geometry (`crates/tpt-chora-render/src/spatial.rs`)
+- [ ] Make `create_foveation_node` use its computed `FoveationLevel` to drive
+  an actual decision (e.g. size a shadow-map resource via
+  `get_shadow_map_size`) instead of computing and discarding it
+  (`crates/tpt-chora-render/src/spatial.rs`)
+- [ ] Wire `create_stereo_node`/`create_foveation_node`/`create_volumetric_node`
+  into the `tpt-chora-all-subsystems` demo (behind the existing `spatial`
+  feature) and add render-graph execution tests for all three (currently zero
+  tests in `spatial.rs`)
+
+### GPU hit-testing
+- [ ] Give `GpuHitTest::hit_test_gpu` a real compute-shader dispatch against
+  the already-allocated `bvh_buffer`/`depth_buffer`/`hit_results_buffer`
+  instead of scanning `node_map` on the CPU; keep `hit_test_2d`'s CPU tree
+  traversal as the deliberate, honestly-named CPU path
+  (`crates/tpt-chora-input/src/hit_test.rs`)
+- [ ] Add tests exercising `hit_test_gpu` against a `new_from_gpu`-constructed
+  instance (existing tests only cover the CPU-only `GpuHitTest::new()` path)
+
+### Security hardening
+- [ ] Bound `FfiBridge::call_function` execution: enable `wasmtime` fuel
+  consumption and set a per-call fuel budget so a spinning untrusted Wasm
+  module traps instead of hanging the host (`crates/tpt-chora-compat/src/ffi_bridge.rs`)
+- [ ] Install a `wasmtime::ResourceLimiter`/`StoreLimits` capping
+  memory/table growth so untrusted Wasm can't OOM the host process
+  (`crates/tpt-chora-compat/src/ffi_bridge.rs`)
+- [ ] Validate `tpt-chora new <name>` rejects path separators/`..`/absolute
+  paths before using `name` in filesystem paths and generated file contents
+  (`crates/tpt-chora-cli/src/new_app.rs`)
+- [ ] Add `deny.toml` and a `cargo-deny` CI step for supply-chain
+  vulnerability/license scanning (currently nothing scans `Cargo.lock`'s 379
+  packages, including `wasmtime`)
+
+### CI and docs
+- [ ] Get `cargo test --workspace` running in CI (install Mesa software
+  Vulkan driver so wgpu's existing adapter fallback picks up lavapipe on
+  `ubuntu-latest`) — currently CI only runs `fmt`/`clippy`/`build`
+  (`.github/workflows/ci.yml`)
+- [ ] Rewrite `README.md` to list all 12 workspace crates (not just
+  `tpt-chora-render`) and document `tpt-chora-cli` usage
+- [ ] Update `AGENTS.md`/`CHANGELOG.md` to reflect current crate/phase state
+  (both still describe "Phase 1, one crate")
+
+### Adoption tooling
+- [ ] Add a `tpt-chora completions <shell>` subcommand (`clap_complete`,
+  bash/zsh/fish/powershell) (`crates/tpt-chora-cli/src/main.rs`)
+- [ ] Add a `tpt-chora preview <project-dir>` dev-loop command combining
+  `tpt_chora_inspector::HotReloader` with `tpt_chora_render::Renderer` to
+  re-render a PNG snapshot on every file change (`crates/tpt-chora-cli`)

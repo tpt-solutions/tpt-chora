@@ -8,9 +8,9 @@ rust-version.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-readme.workspace = true
-keywords.workspace = true
-categories.workspace = true
+readme = "README.md"
+keywords = ["3d", "stereoscopic", "vr", "spatial-audio", "foveated-rendering"]
+categories = ["graphics", "multimedia::audio"]
 
 [dependencies]
 wgpu = "0.19"
