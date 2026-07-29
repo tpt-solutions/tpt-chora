@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 pub mod dynamic_fidelity;
 pub mod error;
 pub mod headless;

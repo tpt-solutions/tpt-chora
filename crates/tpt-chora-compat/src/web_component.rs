@@ -33,7 +33,17 @@ impl ComponentBridge {
         self.renderer = tpt_chora_render::Renderer::new_headless(self.width, self.height).ok();
     }
 
-    pub fn render(&self, width: u32, height: u32) -> Vec<u8> {
+    pub fn render(&mut self, width: u32, height: u32) -> Vec<u8> {
+        // Re-create the headless renderer at the requested size instead of
+        // silently returning placeholder pixels whenever a caller asks for
+        // anything other than the size `initialize()` happened to pick.
+        if self.renderer.is_none() || width != self.width || height != self.height {
+            self.width = width;
+            self.height = height;
+            self.buffer = vec![0u8; (width * height * 4) as usize];
+            self.renderer = tpt_chora_render::Renderer::new_headless(width, height).ok();
+        }
+
         if let Some(ref renderer) = self.renderer {
             if let Ok(pixels) = renderer.render_frame() {
                 if pixels.len() == (width * height * 4) as usize {
@@ -42,6 +52,9 @@ impl ComponentBridge {
             }
         }
 
+        // Only reached if the renderer itself couldn't be created or
+        // couldn't render (e.g. no GPU adapter) — a real fallback, not a
+        // silent one for a size mismatch that a resize should have fixed.
         let mut pixels = vec![0u8; (width * height * 4) as usize];
         let name_hash = self
             .config
@@ -93,5 +106,38 @@ impl ComponentBridge {
 
     pub fn buffer(&self) -> &[u8] {
         &self.buffer
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bridge() -> ComponentBridge {
+        ComponentBridge::new(WebComponentConfig {
+            name: "test-widget".into(),
+            shadow_dom: false,
+            attributes: vec![],
+            events: vec![],
+        })
+    }
+
+    #[test]
+    fn render_at_a_different_size_than_initialize_returns_correctly_sized_buffer() {
+        let mut bridge = bridge();
+        bridge.initialize();
+        assert_eq!(bridge.render(300, 150).len(), 300 * 150 * 4);
+        // Previously this silently returned placeholder pixels rather than
+        // a re-rendered buffer for any size other than the 300x150 that
+        // `initialize()` hardcoded.
+        let pixels = bridge.render(64, 48);
+        assert_eq!(pixels.len(), 64 * 48 * 4);
+    }
+
+    #[test]
+    fn render_without_initialize_still_returns_correctly_sized_buffer() {
+        let mut bridge = bridge();
+        let pixels = bridge.render(32, 32);
+        assert_eq!(pixels.len(), 32 * 32 * 4);
     }
 }

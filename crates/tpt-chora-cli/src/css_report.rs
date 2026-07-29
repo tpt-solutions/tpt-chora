@@ -26,7 +26,7 @@ pub fn run(path: &str) -> Result<(), CssReportError> {
 
     let violation_count = result.violations.len();
     let auto_count = result.auto_corrections.len();
-    let clean = decl_count - violation_count;
+    let clean = decl_count.saturating_sub(violation_count);
 
     let score = if decl_count == 0 {
         100.0

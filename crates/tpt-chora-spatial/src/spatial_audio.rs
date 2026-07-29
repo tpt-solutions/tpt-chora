@@ -2,6 +2,9 @@ use std::collections::HashMap;
 use std::io::Cursor;
 
 use glam::Vec3;
+use rodio::Source;
+
+use crate::panned_source::PannedSource;
 
 pub struct SpatialAudioEngine {
     listener_pos: Vec3,
@@ -53,6 +56,25 @@ impl SpatialAudioOutput {
         let cursor = Cursor::new(data.to_vec());
         if let Ok(source) = rodio::Decoder::new(cursor) {
             self.sink.append(source);
+        }
+    }
+
+    /// Decodes `data` and plays it panned per `hrtf`: `azimuth`/
+    /// `interaural_time_diff_ms` drive a constant-power stereo pan plus an
+    /// ITD delay line (see `PannedSource`), and `gain`/`near_field_gain`
+    /// set the sink's overall volume, so a 3D-positioned source actually
+    /// sounds directional instead of only changing in loudness.
+    pub fn play_source_with_hrtf(&self, data: &[u8], hrtf: &HrtfParams) {
+        let cursor = Cursor::new(data.to_vec());
+        if let Ok(source) = rodio::Decoder::new(cursor) {
+            self.sink
+                .set_volume((hrtf.gain * hrtf.near_field_gain).clamp(0.0, 1.0));
+            let panned = PannedSource::new(
+                source.convert_samples::<f32>(),
+                hrtf.azimuth,
+                hrtf.interaural_time_diff_ms,
+            );
+            self.sink.append(panned);
         }
     }
 
@@ -118,8 +140,7 @@ impl SpatialAudioEngine {
                 source.hrtf_params = Some(params.clone());
             }
             if let Some(ref output) = self.output {
-                output.set_volume(params.gain);
-                output.play_source_any_format(&sound_data);
+                output.play_source_with_hrtf(&sound_data, &params);
             }
         }
         id
@@ -138,7 +159,14 @@ impl SpatialAudioEngine {
                     s.hrtf_params = Some(params.clone());
                 }
                 if let Some(ref output) = self.output {
-                    output.set_volume(params.gain);
+                    // The sink mixes one sequential queue of already-appended
+                    // sources (see `play_source_with_hrtf`): there's no
+                    // handle to the in-flight `PannedSource` to re-pan it
+                    // live, so a position update can only adjust the
+                    // sink-wide volume (still including `near_field_gain`,
+                    // which — like the pan/ITD fields — used to be computed
+                    // and discarded here).
+                    output.set_volume((params.gain * params.near_field_gain).clamp(0.0, 1.0));
                 }
             }
         }

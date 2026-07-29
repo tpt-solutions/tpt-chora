@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use glam::Vec3;
 use tpt_chora_a11y::focus::{FocusDirection, FocusTraversal};
 use tpt_chora_a11y::semantic::{
@@ -18,22 +20,39 @@ use tpt_chora_media::texture::GpuTextureCache;
 use tpt_chora_runtime::archon_stub::ChoraRuntime;
 use tpt_chora_runtime::contracts::{
     AccessibilityRole as RuntimeRole, ChoraSemanticNode, ChoraSemanticTree, ChoraVisualNode,
-    ChoraVisualTree, GpuMaterialHandle, GpuMeshHandle, GpuTextureHandle,
+    ChoraVisualTree, GpuMaterialHandle, GpuMeshHandle, GpuTextureHandle, HierarchicalZDepth,
 };
 use tpt_chora_runtime::telos_stub::{EidosProof, EventType, ProofType, TelosEvent, TelosState};
 use tpt_chora_spatial::foveated::FoveatedRenderer;
 use tpt_chora_spatial::spatial_audio::SpatialAudioEngine;
 use tpt_chora_spatial::stereoscopic::StereoscopicRenderer;
 
+/// Groups the security-gated z-depth inputs (`HierarchicalZDepth::compute_z`'s
+/// `parent_z`/`sibling_index`) so `make_visual_node` stays under clippy's
+/// argument-count lint instead of taking them as three separate parameters.
+struct ZDepthPlacement<'a> {
+    system: &'a HierarchicalZDepth,
+    parent_z: f32,
+    sibling_index: u32,
+}
+
 fn make_visual_node(
     transform: glam::Mat4,
     geometry: GpuMeshHandle,
     material: GpuMaterialHandle,
     clip_mask: GpuTextureHandle,
-    z_depth: f32,
     bounds: [f32; 4],
+    placement: ZDepthPlacement<'_>,
 ) -> ChoraVisualNode {
-    ChoraVisualNode::new(transform, geometry, material, clip_mask, bounds).with_z_depth_raw(z_depth)
+    let mut node = ChoraVisualNode::new(transform, geometry, material, clip_mask, bounds);
+    node.set_z_depth(
+        placement.system,
+        placement.parent_z,
+        placement.sibling_index,
+        false,
+    )
+    .expect("z-depth within the modal-capability policy");
+    node
 }
 
 fn main() {
@@ -261,15 +280,22 @@ fn main() {
 
     println!("\n[Phase 7] Integration Contracts (TPT Trinity)");
     let _runtime = ChoraRuntime::new();
+    let z_depth_system = HierarchicalZDepth::new(0.0, 0.1, 1.0);
     let mut visual_tree = ChoraVisualTree::new();
-    let root_idx = visual_tree.add_node(make_visual_node(
+    let root_node = make_visual_node(
         glam::Mat4::IDENTITY,
         GpuMeshHandle(0),
         GpuMaterialHandle(0),
         GpuTextureHandle(0),
-        0.0,
         [0.0, 0.0, 800.0, 600.0],
-    ));
+        ZDepthPlacement {
+            system: &z_depth_system,
+            parent_z: 0.0,
+            sibling_index: 0,
+        },
+    );
+    let root_z = root_node.z_depth();
+    let root_idx = visual_tree.add_node(root_node);
     let _child_idx = visual_tree.add_child(
         root_idx,
         make_visual_node(
@@ -277,8 +303,12 @@ fn main() {
             GpuMeshHandle(1),
             GpuMaterialHandle(1),
             GpuTextureHandle(0),
-            0.1,
             [100.0, 100.0, 300.0, 200.0],
+            ZDepthPlacement {
+                system: &z_depth_system,
+                parent_z: root_z,
+                sibling_index: 0,
+            },
         ),
     );
     println!(

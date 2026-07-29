@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 pub mod atlas;
 pub mod error;
 pub mod sdf;

@@ -209,6 +209,17 @@ impl RenderGraph {
         queue: &wgpu::Queue,
         security: Option<&SecurityContext>,
     ) -> Result<(), RenderError> {
+        if let Some(sec) = security {
+            if let Err(violations) = self.lint_capabilities(&sec.capability) {
+                let message = violations
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                return Err(RenderError::SecurityViolation(message));
+            }
+        }
+
         let order = self.topo_order()?;
 
         let mut resources: HashMap<ResourceId, TransientTexture> = HashMap::new();

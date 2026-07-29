@@ -1,3 +1,10 @@
+// `deny` rather than `forbid`: the optional `native-haptics-backends`
+// feature calls real OS haptics APIs (CoreHaptics / Android Vibrator), which
+// need `unsafe` FFI at their call sites (each annotated with its own
+// `#[allow(unsafe_code)]` and a `// SAFETY:` justification) — everything
+// else in this crate stays safe.
+#![deny(unsafe_code)]
+
 pub mod devices;
 pub mod error;
 pub mod haptics;

@@ -1,3 +1,12 @@
+/// Largest width/height (in pixels) `ImageDecoder` will decode. Rejecting
+/// oversized images before the full decode guards against decompression
+/// bombs — a small compressed file (e.g. a crafted PNG) that expands to a
+/// multi-gigabyte pixel buffer.
+const MAX_IMAGE_DIMENSION: u32 = 16_384;
+
+/// Largest decoded RGBA byte budget `ImageDecoder` will allocate.
+const MAX_DECODED_BYTES: u64 = 256 * 1024 * 1024;
+
 pub struct ImageDecoder;
 
 pub struct VideoDecoder {
@@ -34,6 +43,17 @@ pub enum ImageFormat {
     Bgra8,
 }
 
+/// `image::Limits` is `#[non_exhaustive]`, so it can't be built with struct-
+/// literal syntax outside the `image` crate; construct the default and
+/// mutate the fields we care about instead.
+fn decode_limits() -> image::Limits {
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_IMAGE_DIMENSION);
+    limits.max_image_height = Some(MAX_IMAGE_DIMENSION);
+    limits.max_alloc = Some(MAX_DECODED_BYTES);
+    limits
+}
+
 impl ImageDecoder {
     pub fn new() -> Self {
         Self
@@ -50,7 +70,18 @@ impl ImageDecoder {
     }
 
     fn decode_image_rs(&self, data: &[u8]) -> Result<DecodedImage, crate::MediaError> {
-        let img = image::load_from_memory(data)
+        // Setting `Limits` before `decode()` (rather than calling the
+        // `image::load_from_memory` free function, which decodes with no
+        // caps) rejects oversized/decompression-bomb images by their
+        // declared header dimensions before the full pixel buffer is
+        // allocated.
+        let mut reader = image::ImageReader::new(std::io::Cursor::new(data))
+            .with_guessed_format()
+            .map_err(|e| crate::MediaError::ImageDecode(e.to_string()))?;
+        reader.limits(decode_limits());
+
+        let img = reader
+            .decode()
             .map_err(|e| crate::MediaError::ImageDecode(e.to_string()))?;
 
         let rgba = img.to_rgba8();
@@ -191,5 +222,54 @@ impl VideoDecoder {
 impl Default for VideoDecoder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn encode_png(width: u32, height: u32) -> Vec<u8> {
+        let img = image::RgbaImage::from_fn(width, height, |x, y| {
+            image::Rgba([x as u8, y as u8, 0, 255])
+        });
+        let mut bytes = Vec::new();
+        image::DynamicImage::ImageRgba8(img)
+            .write_to(
+                &mut std::io::Cursor::new(&mut bytes),
+                image::ImageFormat::Png,
+            )
+            .expect("encode test PNG");
+        bytes
+    }
+
+    #[test]
+    fn decodes_a_normal_sized_image() {
+        let data = encode_png(4, 4);
+        let decoded = ImageDecoder::new().decode(&data).expect("decode");
+        assert_eq!((decoded.width, decoded.height), (4, 4));
+        assert_eq!(decoded.data.len(), 4 * 4 * 4);
+    }
+
+    #[test]
+    fn rejects_images_exceeding_the_max_dimension() {
+        // One dimension over the cap; the other stays tiny so the encoded
+        // fixture itself is small.
+        let data = encode_png(MAX_IMAGE_DIMENSION + 1, 1);
+        let err = match ImageDecoder::new().decode(&data) {
+            Ok(_) => panic!("expected oversized image to be rejected"),
+            Err(e) => e,
+        };
+        assert!(
+            err.to_string().to_lowercase().contains("limit"),
+            "expected a limits error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn accepts_an_image_exactly_at_the_max_dimension() {
+        let data = encode_png(1, MAX_IMAGE_DIMENSION);
+        let decoded = ImageDecoder::new().decode(&data).expect("decode");
+        assert_eq!(decoded.height, MAX_IMAGE_DIMENSION);
     }
 }

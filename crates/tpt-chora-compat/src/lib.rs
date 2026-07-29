@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 pub mod css_parser;
 pub mod deployment;
 pub mod eidos_transpiler;

@@ -1,5 +1,8 @@
+#![forbid(unsafe_code)]
+
 pub mod error;
 pub mod foveated;
+mod panned_source;
 pub mod spatial_audio;
 pub mod stereoscopic;
 pub mod volumetric;

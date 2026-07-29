@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod css_report;
 mod doctor;
 mod new_app;

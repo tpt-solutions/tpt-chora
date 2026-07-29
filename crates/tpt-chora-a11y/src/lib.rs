@@ -1,3 +1,10 @@
+// `deny` rather than `forbid`: the optional `native-a11y-backends` feature
+// calls real OS accessibility APIs (Windows UIA / macOS NSAccessibility /
+// Android AccessibilityNodeInfo), which need `unsafe` FFI at their call
+// sites (each annotated with its own `#[allow(unsafe_code)]` and a
+// `// SAFETY:` justification) — everything else in this crate stays safe.
+#![deny(unsafe_code)]
+
 pub mod bridge;
 pub mod error;
 pub mod focus;

@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 //! `tpt-chora-render`: the Core Rendering Engine (spec.txt §2.1, "The
 //! Canvas") — the foundational GPU pipeline responsible for rasterizing
 //! geometry, managing framebuffers, and executing shaders via wgpu.

@@ -57,7 +57,13 @@ impl ChoraVisualNode {
         Ok(())
     }
 
-    pub fn with_z_depth_raw(mut self, z: f32) -> Self {
+    /// Test-only escape hatch that sets `z_depth` directly, bypassing
+    /// `HierarchicalZDepth::compute_z`'s modal-capability check. `cfg(test)`
+    /// keeps this out of the compiled library entirely so no external caller
+    /// can use it to bypass the security gate in real code — only this
+    /// crate's own unit tests may construct nodes with an arbitrary z_depth.
+    #[cfg(test)]
+    fn with_z_depth_raw(mut self, z: f32) -> Self {
         self.z_depth = z;
         self
     }

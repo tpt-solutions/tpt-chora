@@ -7,6 +7,27 @@ pub struct WebGpuBootstrap {
     _initialized: bool,
 }
 
+/// Escapes a string for safe embedding inside a double-quoted JS string
+/// literal in the generated bootstrap script. `wasm_url`/`shader_urls` are
+/// public setters (`with_wasm_url`/`with_shader_urls`), so anything other
+/// than a hardcoded literal could otherwise inject arbitrary JS/HTML into
+/// the page this script generates.
+fn escape_js_string_literal(s: &str) -> String {
+    let mut escaped = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '<' => escaped.push_str("\\u003C"),
+            '>' => escaped.push_str("\\u003E"),
+            _ => escaped.push(c),
+        }
+    }
+    escaped
+}
+
 impl WebGpuBootstrap {
     pub fn new(canvas_width: u32, canvas_height: u32) -> Self {
         Self {
@@ -40,6 +61,7 @@ impl WebGpuBootstrap {
             .iter()
             .enumerate()
             .map(|(i, url)| {
+                let url = escape_js_string_literal(url);
                 format!(
                     "    const shaderResponse_{i} = await fetch(\"{url}\");\n    \
                      const shaderCode_{i} = await shaderResponse_{i}.text();\n"
@@ -107,7 +129,7 @@ impl WebGpuBootstrap {
 }})();"#,
             width = self.canvas_width,
             height = self.canvas_height,
-            wasm_url = self.wasm_url,
+            wasm_url = escape_js_string_literal(&self.wasm_url),
             shader_fetches = shader_fetches,
             shader_modules = shader_modules,
         )
@@ -119,5 +141,59 @@ impl WebGpuBootstrap {
 
     pub fn wasm_binary_size_bytes(&self) -> Option<usize> {
         self.wasm_binary_size
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escapes_quotes_backslashes_and_newlines() {
+        let escaped = escape_js_string_literal("a\"b\\c\nd");
+        assert_eq!(escaped, "a\\\"b\\\\c\\nd");
+    }
+
+    #[test]
+    fn escapes_angle_brackets_to_prevent_script_breakout() {
+        let escaped = escape_js_string_literal("</script><script>alert(1)</script>");
+        assert!(!escaped.contains('<'));
+        assert!(!escaped.contains('>'));
+    }
+
+    #[test]
+    fn malicious_wasm_url_cannot_break_out_of_the_string_literal() {
+        // If the closing `"` in this payload weren't escaped, the
+        // generated `fetch("...")` call would have its string argument
+        // closed early, leaving `fetch("");` behind followed by the
+        // injected statement executing outside any string.
+        let bootstrap = WebGpuBootstrap::new(100, 100)
+            .with_wasm_url("\");alert(document.cookie);//".to_string());
+        let script = bootstrap.generate_bootstrap_script();
+        assert!(
+            !script.contains("fetch(\"\");"),
+            "quote was not escaped, closing the fetch() string literal early:\n{script}"
+        );
+        assert!(script.contains("\\\");alert(document.cookie);//"));
+    }
+
+    #[test]
+    fn malicious_shader_url_cannot_break_out_of_the_string_literal() {
+        let bootstrap = WebGpuBootstrap::new(100, 100)
+            .with_wasm_url("https://cdn.example.com/chora.wasm".to_string())
+            .with_shader_urls(vec!["\";fetch('https://evil.example');//".to_string()]);
+        let script = bootstrap.generate_bootstrap_script();
+        assert!(
+            !script.contains("fetch(\"\");"),
+            "quote was not escaped, closing the fetch() string literal early:\n{script}"
+        );
+    }
+
+    #[test]
+    fn benign_url_round_trips_unescaped() {
+        let bootstrap = WebGpuBootstrap::new(100, 100)
+            .with_wasm_url("https://cdn.example.com/chora.wasm".to_string());
+        let script = bootstrap.generate_bootstrap_script();
+        assert!(script.contains("https://cdn.example.com/chora.wasm"));
     }
 }

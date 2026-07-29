@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 pub mod archon_stub;
 pub mod contracts;
 pub mod error;
