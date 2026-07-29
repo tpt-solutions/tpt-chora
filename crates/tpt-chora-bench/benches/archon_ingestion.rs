@@ -26,9 +26,16 @@ fn bench_bind_state_to_gpu(c: &mut Criterion) {
             b.iter(|| {
                 // The page's `dirty` flag is never cleared here, so every
                 // iteration exercises the "fresh data this frame" path
-                // rather than the already-bound cache hit.
+                // rather than the already-bound cache hit. `write_buffer`
+                // only stages its copy into `Device::pending_writes`; that
+                // staging allocation is freed only once an actual
+                // `queue.submit` processes it, so submit and poll every
+                // iteration to keep staging memory bounded.
                 let page = archon.get_page(page_id).expect("page exists");
-                runtime.bind_state_to_gpu(&ctx.device, page)
+                let buffer = runtime.bind_state_to_gpu(&ctx.device, &ctx.queue, page);
+                ctx.queue.submit(std::iter::empty());
+                ctx.device.poll(wgpu::Maintain::Wait);
+                buffer
             });
         });
     }

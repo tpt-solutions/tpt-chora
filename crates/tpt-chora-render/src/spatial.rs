@@ -1,6 +1,7 @@
 use wgpu::util::DeviceExt;
 
 use crate::graph::{GraphNode, NodeExecuteCtx, ResourceId, TransientTextureDesc};
+use crate::security::CapabilityToken;
 
 pub const VOLUMETRIC_OUTPUT: ResourceId = ResourceId("volumetric_output");
 pub const VOLUMETRIC_DEPTH: ResourceId = ResourceId("volumetric_depth");
@@ -61,6 +62,9 @@ pub fn create_volumetric_node(width: u32, height: u32) -> GraphNode {
                 | wgpu::TextureUsages::TEXTURE_BINDING,
         },
     )
+    .requires(ResourceId("scene_color"), CapabilityToken::TEXTURE_READ)
+    .requires(VOLUMETRIC_DEPTH, CapabilityToken::TEXTURE_READ)
+    .requires(VOLUMETRIC_OUTPUT, CapabilityToken::TEXTURE_READ)
 }
 
 /// A small pyramid (4 triangles, position + normal per vertex, matching
@@ -156,6 +160,8 @@ pub fn create_stereo_node(width: u32, height: u32, format: wgpu::TextureFormat) 
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         },
     )
+    .requires(STEREO_LEFT, CapabilityToken::TEXTURE_READ)
+    .requires(STEREO_RIGHT, CapabilityToken::TEXTURE_READ)
 }
 
 /// Sizes a shadow-map render target off the foveation level computed for
@@ -183,6 +189,7 @@ pub fn create_foveation_node(width: f32, height: f32) -> GraphNode {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
         },
     )
+    .requires(FOVEATION_SHADOW_MAP, CapabilityToken::TEXTURE_READ)
 }
 
 #[cfg(test)]

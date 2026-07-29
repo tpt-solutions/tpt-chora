@@ -17,6 +17,7 @@ dhat = { version = "0.3", optional = true }
 
 [dev-dependencies]
 criterion = "0.5"
+wgpu = "0.19"
 
 [features]
 dhat-heap = ["dep:dhat"]

@@ -304,7 +304,8 @@ impl Renderer {
                     usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                         | wgpu::TextureUsages::TEXTURE_BINDING,
                 },
-            ),
+            )
+            .requires(SCENE_COLOR, crate::security::CapabilityToken::TEXTURE_READ),
         );
 
         graph.add_node(
@@ -322,7 +323,9 @@ impl Renderer {
                     format: color_format,
                     usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
                 },
-            ),
+            )
+            .requires(SCENE_COLOR, crate::security::CapabilityToken::TEXTURE_READ)
+            .requires(FINAL_COLOR, crate::security::CapabilityToken::TEXTURE_READ),
         );
 
         graph.execute(device, queue, Some(&self.security))?;

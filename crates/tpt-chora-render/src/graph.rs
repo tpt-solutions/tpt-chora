@@ -9,7 +9,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::error::RenderError;
-use crate::security::SecurityContext;
+use crate::security::{CapabilityGuard, CapabilityToken, SecurityContext};
 
 /// A named handle to a transient resource owned by the graph for one execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -62,6 +62,13 @@ pub struct GraphNode {
     pub reads: Vec<ResourceId>,
     pub writes: Vec<ResourceId>,
     pub creates: Vec<(ResourceId, TransientTextureDesc)>,
+    /// Declarative capability requirements: the `CapabilityToken`s this
+    /// node's execute closure needs in order to legitimately access a
+    /// given resource. Unlike `reads`/`writes`/`creates` (which describe
+    /// resource *dependencies* for scheduling), this describes *security*
+    /// requirements, and is pure data — checkable by `RenderGraph::lint_capabilities`
+    /// without a GPU device or ever running the closure.
+    pub requires: Vec<(ResourceId, CapabilityToken)>,
     execute: ExecuteFn,
 }
 
@@ -72,6 +79,7 @@ impl GraphNode {
             reads: Vec::new(),
             writes: Vec::new(),
             creates: Vec::new(),
+            requires: Vec::new(),
             execute: Box::new(execute),
         }
     }
@@ -90,7 +98,33 @@ impl GraphNode {
         self.creates.push((id, desc));
         self
     }
+
+    pub fn requires(mut self, id: ResourceId, token: CapabilityToken) -> Self {
+        self.requires.push((id, token));
+        self
+    }
 }
+
+/// A single failed declarative capability check found by
+/// `RenderGraph::lint_capabilities`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CapabilityLintViolation {
+    pub node: &'static str,
+    pub resource: ResourceId,
+    pub missing: CapabilityToken,
+}
+
+impl std::fmt::Display for CapabilityLintViolation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "node {:?} requires capability {:?} on resource {:?}, which its guard does not grant",
+            self.node, self.missing, self.resource
+        )
+    }
+}
+
+impl std::error::Error for CapabilityLintViolation {}
 
 /// The render graph: a set of nodes plus their declared resource dependencies.
 #[derive(Default)]
@@ -238,6 +272,41 @@ impl RenderGraph {
         self.resources = resources;
         Ok(())
     }
+
+    /// Build-time capability lint: checks every node's declared `requires`
+    /// against `guard` without allocating any GPU resources, running any
+    /// node's execute closure, or otherwise needing a `wgpu::Device` at
+    /// all. Catches a component declaring a resource dependency without
+    /// the capability token its closure will actually need at runtime,
+    /// before the graph is ever executed.
+    pub fn lint_capabilities(
+        &self,
+        guard: &CapabilityGuard,
+    ) -> Result<(), Vec<CapabilityLintViolation>> {
+        let violations: Vec<CapabilityLintViolation> = self
+            .nodes
+            .iter()
+            .flat_map(|node| {
+                node.requires.iter().filter_map(move |(id, token)| {
+                    if guard.has_token(*token) {
+                        None
+                    } else {
+                        Some(CapabilityLintViolation {
+                            node: node.name,
+                            resource: *id,
+                            missing: *token,
+                        })
+                    }
+                })
+            })
+            .collect();
+
+        if violations.is_empty() {
+            Ok(())
+        } else {
+            Err(violations)
+        }
+    }
 }
 
 // Resources stay alive on the graph after `execute` so callers can read back
@@ -344,5 +413,54 @@ mod tests {
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         }
+    }
+
+    #[test]
+    fn lint_capabilities_passes_when_guard_grants_required_tokens() {
+        let mut graph = RenderGraph::new();
+        let node = GraphNode::new("a", |_| {})
+            .creates(ResourceId("x"), dummy_tex_desc())
+            .requires(ResourceId("x"), CapabilityToken::TEXTURE_READ);
+        graph.add_node(node);
+
+        let guard = CapabilityGuard::new(0, CapabilityToken::TEXTURE_READ);
+        assert!(graph.lint_capabilities(&guard).is_ok());
+    }
+
+    #[test]
+    fn lint_capabilities_reports_missing_token() {
+        let mut graph = RenderGraph::new();
+        let node = GraphNode::new("a", |_| {})
+            .creates(ResourceId("x"), dummy_tex_desc())
+            .requires(ResourceId("x"), CapabilityToken::TEXTURE_WRITE);
+        graph.add_node(node);
+
+        // Guard only has TEXTURE_READ, not the TEXTURE_WRITE the node requires.
+        let guard = CapabilityGuard::new(0, CapabilityToken::TEXTURE_READ);
+        let violations = graph.lint_capabilities(&guard).unwrap_err();
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].node, "a");
+        assert_eq!(violations[0].resource, ResourceId("x"));
+        assert_eq!(violations[0].missing, CapabilityToken::TEXTURE_WRITE);
+        assert!(violations[0].to_string().contains("TEXTURE_WRITE"));
+    }
+
+    #[test]
+    fn lint_capabilities_reports_every_violation_not_just_the_first() {
+        let mut graph = RenderGraph::new();
+        let a = GraphNode::new("a", |_| {})
+            .creates(ResourceId("x"), dummy_tex_desc())
+            .requires(ResourceId("x"), CapabilityToken::TEXTURE_WRITE);
+        let b = GraphNode::new("b", |_| {})
+            .creates(ResourceId("y"), dummy_tex_desc())
+            .requires(ResourceId("y"), CapabilityToken::STORAGE_WRITE);
+        graph.add_node(a);
+        graph.add_node(b);
+
+        let guard = CapabilityGuard::new(0, CapabilityToken::empty());
+        let violations = graph.lint_capabilities(&guard).unwrap_err();
+        assert_eq!(violations.len(), 2);
+        assert!(violations.iter().any(|v| v.node == "a"));
+        assert!(violations.iter().any(|v| v.node == "b"));
     }
 }

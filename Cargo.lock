@@ -2792,6 +2792,7 @@ dependencies = [
  "dhat",
  "tpt-chora-render",
  "tpt-chora-runtime",
+ "wgpu",
 ]
 
 [[package]]

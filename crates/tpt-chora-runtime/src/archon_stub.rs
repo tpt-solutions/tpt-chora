@@ -162,20 +162,28 @@ impl ChoraRuntime {
     pub fn bind_state_to_gpu(
         &mut self,
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         page: &ArchonPage,
     ) -> Arc<wgpu::Buffer> {
-        if page.dirty || !self.bound_pages.contains(&page.id) {
-            let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("chora-archon-state"),
-                contents: &page.data,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            });
-            let idx = self.gpu_buffers.len();
-            self.gpu_buffers.push(Arc::new(buffer));
+        if let Some(&idx) = self.page_to_buffer.get(&page.id) {
+            let same_size = self.gpu_buffers[idx].size() == page.data.len() as u64;
+            if !same_size {
+                // Size changed since the last bind: the existing buffer
+                // can't be reused in place, so replace it.
+                self.gpu_buffers[idx] = Arc::new(device.create_buffer_init(
+                    &wgpu::util::BufferInitDescriptor {
+                        label: Some("chora-archon-state"),
+                        contents: &page.data,
+                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    },
+                ));
+            } else if page.dirty || !self.bound_pages.contains(&page.id) {
+                // Same size: update the existing buffer's contents rather
+                // than allocating a new one, so repeated dirty rebinds
+                // don't churn the GPU allocator with alloc/free cycles.
+                queue.write_buffer(&self.gpu_buffers[idx], 0, &page.data);
+            }
             self.bound_pages.insert(page.id);
-            self.page_to_buffer.insert(page.id, idx);
-            Arc::clone(&self.gpu_buffers[idx])
-        } else if let Some(&idx) = self.page_to_buffer.get(&page.id) {
             Arc::clone(&self.gpu_buffers[idx])
         } else {
             let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -185,6 +193,7 @@ impl ChoraRuntime {
             });
             let idx = self.gpu_buffers.len();
             self.gpu_buffers.push(Arc::new(buffer));
+            self.bound_pages.insert(page.id);
             self.page_to_buffer.insert(page.id, idx);
             Arc::clone(&self.gpu_buffers[idx])
         }
