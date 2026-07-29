@@ -18,5 +18,12 @@ bytemuck = { version = "1.14", features = ["derive"] }
 thiserror = "1.0"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 
+[features]
+default = []
+native-video-backends = []
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libva-sys = { version = "0.1", optional = true, features = ["drm"] }
+
 [dev-dependencies]
 png = "0.17"

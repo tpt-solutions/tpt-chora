@@ -19,5 +19,15 @@ thiserror = "1.0"
 glam = "0.25"
 bitflags = "2"
 
+[features]
+default = []
+native-haptics-backends = ["objc2", "jni"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6", features = ["alloc", "std"], optional = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = { version = "0.21", optional = true }
+
 [dev-dependencies]
 pollster = "0.3"

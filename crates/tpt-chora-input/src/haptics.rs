@@ -179,15 +179,60 @@ impl HapticRouter {
     }
 
     fn play_corehaptics(&self, _pattern: &HapticPattern) -> Result<(), crate::InputError> {
-        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        #[cfg(all(
+            feature = "native-haptics-backends",
+            any(target_os = "macos", target_os = "ios")
+        ))]
         {
-            let events = Self::translate_pattern(_pattern);
-            for event in &events {
-                if event.delay_ms > 0 {
-                    std::thread::sleep(std::time::Duration::from_millis(event.delay_ms));
-                }
-                std::thread::sleep(std::time::Duration::from_millis(event.duration_ms));
+            use objc2::ffi::{objc_msgSend, objc_msgSend_stret};
+            use objc2::runtime::{Object, Sel};
+            use std::ffi::c_void;
+
+            extern "C" {
+                fn objc_getClass(name: *const u8) -> *mut Object;
+                fn sel_getUid(name: *const u8) -> Sel;
             }
+
+            let kCHHapticEngine = b"CHHapticEngine\0" as *const u8;
+            let kCHHapticPatternPlayer = b"CHHapticPatternPlayer\0" as *const u8;
+            let kCHHapticPattern = b"CHHapticPattern\0" as *const u8;
+            let kCHHapticEngineStart = b"startAndReturnError:\0" as *const u8;
+            let kCHHapticEngineCreatePlayer = b"createPlayerWithPattern:error:\0" as *const u8;
+            let kCHHapticPatternPlayerStart = b"startAtTime:error:\0" as *const u8;
+
+            let events = Self::translate_pattern(_pattern);
+            let total_duration_ms: u64 = events.iter().map(|e| e.duration_ms + e.delay_ms).sum();
+
+            unsafe {
+                let engine_class = objc_getClass(kCHHapticEngine as *const u8);
+                let start_sel = sel_getUid(kCHHapticEngineStart as *const u8);
+                let create_player_sel = sel_getUid(kCHHapticEngineCreatePlayer as *const u8);
+                let start_player_sel = sel_getUid(kCHHapticPatternPlayerStart as *const u8);
+
+                let _engine: *mut c_void =
+                    objc_msgSend(engine_class, start_sel, std::ptr::null_mut::<*mut c_void>());
+                let _player: *mut c_void = objc_msgSend(
+                    _engine,
+                    create_player_sel,
+                    std::ptr::null_mut::<*mut c_void>(),
+                    std::ptr::null_mut::<*mut c_void>(),
+                );
+                objc_msgSend(
+                    _player,
+                    start_player_sel,
+                    0.0,
+                    std::ptr::null_mut::<*mut c_void>(),
+                );
+                std::thread::sleep(std::time::Duration::from_millis(total_duration_ms));
+            }
+            Ok(())
+        }
+        #[cfg(all(
+            not(feature = "native-haptics-backends"),
+            any(target_os = "macos", target_os = "ios")
+        ))]
+        {
+            std::thread::sleep(std::time::Duration::from_millis(10));
             Ok(())
         }
         #[cfg(not(any(target_os = "macos", target_os = "ios")))]
@@ -197,15 +242,27 @@ impl HapticRouter {
     }
 
     fn play_android(&self, _pattern: &HapticPattern) -> Result<(), crate::InputError> {
-        #[cfg(target_os = "android")]
+        #[cfg(all(feature = "native-haptics-backends", target_os = "android"))]
         {
+            use jni::JNIEnv;
             let events = Self::translate_pattern(_pattern);
-            for event in &events {
-                if event.delay_ms > 0 {
-                    std::thread::sleep(std::time::Duration::from_millis(event.delay_ms));
-                }
-                std::thread::sleep(std::time::Duration::from_millis(event.duration_ms));
+            let total_duration_ms: u64 = events.iter().map(|e| e.duration_ms + e.delay_ms).sum();
+            let activity = ndk::android::activity::AndroidActivity::from_env(
+                unsafe { jni::JavaVM::from_raw(std::ptr::null_mut() as _) }
+                    .unwrap()
+                    .get_env()
+                    .unwrap(),
+            );
+            let vib_service =
+                activity.get_system_service(ndk::android::activity::SystemService::VibratorService);
+            if let Ok(vib) = vib_service {
+                let _ = vib.vibrate(total_duration_ms);
             }
+            Ok(())
+        }
+        #[cfg(all(not(feature = "native-haptics-backends"), target_os = "android"))]
+        {
+            std::thread::sleep(std::time::Duration::from_millis(10));
             Ok(())
         }
         #[cfg(not(target_os = "android"))]

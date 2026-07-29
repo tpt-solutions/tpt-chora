@@ -38,7 +38,8 @@ crates/
     src/devices.rs           unified device abstraction (mouse/kb/touch/pen/gamepad/XR)
     src/intent.rs            gaze/gesture tracking, intent resolution
     src/hit_test.rs          GPU-accelerated BVH hit testing
-    src/haptics.rs           haptic routing (CoreHaptics/Android/XR stubs)
+    src/haptics.rs           haptic routing (CoreHaptics/Android/XR;
+                             feature-gated `native-haptics-backends`)
   tpt-chora-a11y/           Phase 5: The Accessibility & Semantics Engine ("The Bridge")
     src/semantic.rs          Semantic IR (34 roles, 11 states)
     src/bridge.rs            two-way OS accessibility bridge
@@ -277,8 +278,25 @@ External crate integration: the real `tpt-eidos` (proof-native layout
 compiler), `tpt-archon` (zero-copy state backend), and `tpt-telos`
 (interaction state machine) are stubbed locally in `tpt-chora-runtime`.
 Once those crates are vendored or published, the stubs will be swapped for
-real implementations. Hardware video decoding (VA-API/VideoToolbox/MediaCodec)
-and OS-level haptic APIs (CoreHaptics/Android Vibrator/XR rumble) are
-integration points requiring platform-specific code. The zero-allocation
-render loop target requires profiling under sustained load to identify and
-eliminate any remaining per-frame allocations.
+real implementations.
+
+Platform-specific hardware integrations now have real, feature-gated,
+best-effort implementations behind opt-in Cargo features:
+
+- `tpt-chora-a11y` `native-a11y-backends`: real Windows UI Automation
+  (via the `windows` crate, buildable/testable on this environment),
+  macOS NSAccessibility (via `objc2`/`objc2-app-kit`, unverified on
+  this platform), and Android `AccessibilityNodeInfo` (via `jni`/`ndk`,
+  unverified on this platform).
+- `tpt-chora-input` `native-haptics-backends`: real CoreHaptics
+  (macOS/iOS, via `objc2`, unverified on this platform), Android
+  Vibrator (via `jni`, unverified on this platform), and XR rumble
+  (documented `HapticNotSupported` stub — no existing XR session type
+  in this codebase to wire it to).
+- `tpt-chora-media` `native-video-backends`: real Linux VA-API decode
+  (via raw FFI to `libva`, CI-verified with `libva-dev`), macOS
+  VideoToolbox (via `objc2`, unverified), and Android MediaCodec
+  (via `jni` + NDK, unverified).
+
+The zero-allocation render loop target requires profiling under sustained
+load to identify and eliminate any remaining per-frame allocations.

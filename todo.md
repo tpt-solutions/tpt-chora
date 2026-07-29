@@ -329,67 +329,67 @@ production-ready code, until compiled/tested on real hardware.
 - [x] Add a pre-decode `image::Limits` (max width/height 16384, max alloc
   256MiB) to `ImageDecoder`, closing a decompression-bomb risk in
   `image::load_from_memory`'s unbounded decode (`crates/tpt-chora-media/src/decode.rs`)
-- [ ] Fix `web_component.rs::render()`'s silent placeholder fallback: it
+- [x] Fix `web_component.rs::render()`'s silent placeholder fallback: it
   currently returns fake procedurally-drawn pixels whenever the requested
   size doesn't match the renderer's fixed 300x150 init size, with no
   signal to the caller — re-create/resize the headless renderer to the
   requested size instead, falling back to the placeholder only if
   renderer creation itself fails (`crates/tpt-chora-compat/src/web_component.rs`)
-- [ ] Change `decl_count - violation_count` to `saturating_sub` in the
+- [x] Change `decl_count - violation_count` to `saturating_sub` in the
   CSS compatibility report (`crates/tpt-chora-cli/src/css_report.rs:29`)
-- [ ] Add `#![forbid(unsafe_code)]` to crate roots not touched by the new
+- [x] Add `#![forbid(unsafe_code)]` to crate roots not touched by the new
   platform-backend FFI (those get `#![deny(unsafe_code)]` plus targeted
   `#[allow(unsafe_code)]` at FFI call sites instead)
 
 ### Platform-native backends (best-effort, feature-gated, honestly labeled)
-- [ ] `tpt-chora-a11y` `native-a11y-backends` feature: real Windows UI
+- [x] `tpt-chora-a11y` `native-a11y-backends` feature: real Windows UI
   Automation via the `windows` crate (buildable/testable here); macOS
   NSAccessibility via `objc2`/`objc2-app-kit` (unverified); Android
   `AccessibilityNodeInfo` via `jni` (unverified) (`crates/tpt-chora-a11y/src/bridge.rs`)
-- [ ] `tpt-chora-input` `native-haptics-backends` feature: CoreHaptics via
+- [x] `tpt-chora-input` `native-haptics-backends` feature: CoreHaptics via
   `objc2` (unverified); Android `Vibrator`/`VibrationEffect` via `jni`
   (unverified); XR rumble stays a documented `HapticNotSupported` stub —
   no existing XR session type in this codebase to wire it to
   (`crates/tpt-chora-input/src/haptics.rs`)
-- [ ] `tpt-chora-media` `native-video-backends` feature: real Linux VA-API
+- [x] `tpt-chora-media` `native-video-backends` feature: real Linux VA-API
   decode via raw FFI to `libva` (CI-verified — `libva-dev` added to the
   `verify` job and the feature enabled there); macOS VideoToolbox via
   `objc2` (unverified); Android MediaCodec via `jni` + NDK media APIs
   (unverified) (`crates/tpt-chora-media/src/decode.rs`)
-- [ ] Expand `.github/workflows/ci.yml`'s `verify` job to a
+- [x] Expand `.github/workflows/ci.yml`'s `verify` job to a
   `windows-latest`/`macos-latest`/`ubuntu-latest` matrix (GPU/lavapipe
   test steps stay Linux-only) so the new Windows and macOS platform code
   gets real compiler verification on every push; document that Android
   remains compiled nowhere in CI (no NDK cross-toolchain) and is the
   least-verified of the three platforms
-- [ ] Update `ARCHITECTURE.md`/`README.md` "still directional" language to
+- [x] Update `ARCHITECTURE.md`/`README.md` "still directional" language to
   reflect: real, feature-gated, best-effort implementations now exist for
   all three subsystems; Windows a11y and Linux VA-API are verified
   (compiled + basic tests); macOS/Android paths are unreviewed drafts
 
 ### Adoption tooling & innovative additions
-- [ ] Add a README "Prerequisites" section (MSRV, GPU driver expectations,
+- [x] Add a README "Prerequisites" section (MSRV, GPU driver expectations,
   the Windows MSVC linker requirement currently only in `CLAUDE.md`/
   `AGENTS.md`); add `tpt-chora-bench` to the crate table; document the new
   `native-*-backends` features and the now-enforced capability lint
-- [ ] Add `CONTRIBUTING.md` (human-facing contributor guide, separate from
+- [x] Add `CONTRIBUTING.md` (human-facing contributor guide, separate from
   the agent-facing `AGENTS.md`/`CLAUDE.md`)
-- [ ] Add a `tpt-chora audit` CLI subcommand combining `doctor` diagnostics,
+- [x] Add a `tpt-chora audit` CLI subcommand combining `doctor` diagnostics,
   a `cargo deny check` invocation, and a summary of which
   `native-*-backends` features are enabled/verified on the current
   platform — a single-command "is my setup healthy and safe" report
   (`crates/tpt-chora-cli/src/audit.rs`)
-- [ ] Add `long_about` usage examples to each CLI subcommand
+- [x] Add `long_about` usage examples to each CLI subcommand
   (`crates/tpt-chora-cli/src/main.rs`)
-- [ ] Add real runnable examples to three previously-empty example dirs,
+- [x] Add real runnable examples to three previously-empty example dirs,
   doubling as demonstrations of this phase's new functionality:
   `crates/tpt-chora-a11y/examples/tree_and_focus.rs`,
   `crates/tpt-chora-input/examples/haptic_patterns.rs`,
   `crates/tpt-chora-media/examples/decode_image.rs`
-- [ ] Add a root `Dockerfile` mirroring CI's Linux/lavapipe setup, for a
+- [x] Add a root `Dockerfile` mirroring CI's Linux/lavapipe setup, for a
   reproducible headless build/test environment without installing Vulkan
   drivers or an MSVC toolchain locally
-- [ ] **Milestone:** `cargo fmt --all -- --check`, `cargo clippy --workspace
+- [x] **Milestone:** `cargo fmt --all -- --check`, `cargo clippy --workspace
   --all-targets -- -D warnings`, `cargo build --workspace --all-targets`,
   `cargo test --workspace --all-targets`, and `cargo deny check` all pass
   clean; the three new examples run; `tpt-chora audit` produces a

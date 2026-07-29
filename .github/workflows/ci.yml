@@ -11,7 +11,11 @@ env:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
@@ -28,13 +32,35 @@ jobs:
         # GPU-executing tests/examples need a Vulkan adapter; the runner has
         # no hardware GPU, so install Mesa's software (llvmpipe/lavapipe)
         # ICD and let wgpu's existing force_fallback_adapter path pick it up.
+        # Only runs on Linux runners.
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools libgl1-mesa-dri
       - name: Test
         run: cargo test --workspace --all-targets
       - name: Test (spatial feature)
+        # The spatial feature exercises stereoscopic/foveated/volumetric
+        # render-graph nodes; these require a Vulkan adapter so only run
+        # on Linux where lavapipe is available.
+        if: runner.os == 'Linux'
         run: cargo test -p tpt-chora-render --features spatial
+      - name: Test (native-a11y-backends feature)
+        # Windows UIA backend is buildable on ubuntu-latest via the
+        # windows crate; macOS/Android backends require their respective
+        # platforms so they are only verified on those runners.
+        if: runner.os == 'Windows'
+        run: cargo test -p tpt-chora-a11y --features native-a11y-backends
+      - name: Test (native-haptics-backends feature)
+        # CoreHaptics requires macOS; Android Vibrator requires Android.
+        # On Linux runners this feature adds no testable code.
+        if: runner.os == 'macOS'
+        run: cargo test -p tpt-chora-input --features native-haptics-backends
+      - name: Test (native-video-backends feature)
+        # VA-API requires Linux with libva-dev; VideoToolbox requires macOS;
+        # MediaCodec requires Android. Only Linux is CI-verified here.
+        if: runner.os == 'Linux'
+        run: cargo test -p tpt-chora-media --features native-video-backends
 
   supply-chain:
     runs-on: ubuntu-latest

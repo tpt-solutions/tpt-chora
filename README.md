@@ -18,14 +18,29 @@ roadmap, and `ARCHITECTURE.md` for a crate-by-crate account of what's
 actually implemented versus still directional (platform-specific hardware
 integrations that need real OS/device bindings).
 
+## Prerequisites
+
+- **Rust**: MSRV 1.74 (see `Cargo.toml` `rust-version`)
+- **GPU driver**: A Vulkan/Metal/DX12/WebGPU-capable GPU adapter.
+  On Linux without hardware GPU, install Mesa's software Vulkan
+  driver (`mesa-vulkan-drivers` on Debian/Ubuntu) — `wgpu` will
+  automatically fall back to lavapipe via `force_fallback_adapter`.
+- **Windows**: MSVC linker (Visual Studio Build Tools, "Desktop
+  development with C++" workload) — the bundled GNU/mingw Rust
+  toolchain's linker cannot build wgpu's Windows bindings.
+- **macOS**: Xcode command-line tools (`xcode-select --install`).
+- **Android**: Android NDK + JDK (for `native-haptics-backends` and
+  `native-video-backends` features).
+
 ## Status
 
 All 16 planned phases have a working prototype (Phase 0 scaffold through
-Phase 16 adoption tooling), plus a Phase 17 hardening pass. A few
-integration points are honestly still facades pending platform-specific
-bindings — hardware video decode, the native OS accessibility bridge, and
-native haptics — see `ARCHITECTURE.md`'s "still directional" section before
-relying on those specifically.
+Phase 16 adoption tooling), plus a Phase 17 hardening pass. Platform-specific
+hardware integrations now have real, feature-gated, best-effort implementations:
+`native-a11y-backends` (Windows UIA verified, macOS/Android unverified),
+`native-haptics-backends` (macOS CoreHaptics unverified, Android unverified),
+and `native-video-backends` (Linux VA-API CI-verified, macOS/Android unverified).
+See `ARCHITECTURE.md` for details.
 
 ## Workspace crates
 
@@ -42,7 +57,8 @@ relying on those specifically.
 | `tpt-chora-fallback` | Three-Tier Hardware Fallback: software rasterization, headless output, dynamic fidelity |
 | `tpt-chora-compat` | Migration & Adoption: HTML/CSS transpiler, Wasm/FFI interop, embeddable web component |
 | `tpt-chora-all-subsystems` | Full end-to-end demo binary exercising every subsystem |
-| `tpt-chora-cli` | Adoption Tooling: `doctor` diagnostics, `new` project scaffolding, `css-report`, shell completions, `preview` dev loop |
+| `tpt-chora-bench` | Benchmarking: tessellation throughput, frame pacing, zero-allocation proof, archon ingestion |
+| `tpt-chora-cli` | Adoption Tooling: `doctor` diagnostics, `new` project scaffolding, `css-report`, `audit`, shell completions, `preview` dev loop |
 
 ## Try it
 
@@ -71,6 +87,10 @@ cd my-app && cargo run
 # Run the "Rosetta Stone" legacy CSS -> Chora-IR transpiler against a real
 # stylesheet and see a compatibility score plus flagged violations.
 tpt-chora css-report path/to/site.css
+
+# Run a consolidated health and security audit: doctor diagnostics,
+# cargo-deny check, and native-backend feature status.
+tpt-chora audit
 
 # Generate shell completions.
 tpt-chora completions bash > /etc/bash_completion.d/tpt-chora

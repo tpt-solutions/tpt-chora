@@ -20,6 +20,52 @@ enum VideoDecodeBackend {
     SoftwareFallback,
 }
 
+#[cfg(feature = "native-video-backends")]
+mod vaapi_native {
+    use std::ffi::{c_char, c_int, c_uint, c_ulong};
+
+    extern "C" {
+        pub fn vaInitialize(
+            display: *mut VaDisplay,
+            major_version: *mut c_int,
+            minor_version: *mut c_int,
+        ) -> c_int;
+        pub fn vaTerminate(display: VaDisplay) -> c_int;
+        pub fn vaCreateSurfaces(
+            display: VaDisplay,
+            format: c_uint,
+            width: c_uint,
+            height: c_uint,
+            surface_count: c_uint,
+            surfaces: *mut VaSurfaceID,
+        ) -> c_int;
+        pub fn vaCreateContext(
+            display: VaDisplay,
+            config_id: VaConfigID,
+            picture_width: c_uint,
+            picture_height: c_uint,
+            flag: c_int,
+            num_reference_frames: c_int,
+            surfaces: *mut VaSurfaceID,
+            context: *mut VaContextID,
+        ) -> c_int;
+    }
+
+    #[repr(C)]
+    pub struct VaDisplay;
+    #[repr(C)]
+    pub struct VaConfigID;
+    #[repr(C)]
+    pub struct VaContextID;
+    #[repr(C)]
+    pub struct VaSurfaceID;
+    pub type VaStatus = c_int;
+    pub const VA_STATUS_SUCCESS: VaStatus = 1;
+}
+
+#[cfg(feature = "native-video-backends")]
+pub use vaapi_native::VaDisplay;
+
 pub struct VideoFrame {
     pub width: u32,
     pub height: u32,
@@ -188,7 +234,7 @@ fn f16_from_f32(val: f32) -> u16 {
 
 impl VideoDecoder {
     pub fn new() -> Self {
-        let backend = if cfg!(target_os = "linux") {
+        let backend = if cfg!(feature = "native-video-backends") && cfg!(target_os = "linux") {
             VideoDecodeBackend::VaApi
         } else if cfg!(target_os = "macos") || cfg!(target_os = "ios") {
             VideoDecodeBackend::VideoToolbox
@@ -202,6 +248,22 @@ impl VideoDecoder {
 
     pub fn decode_frame(&self, _encoded_data: &[u8]) -> Result<VideoFrame, crate::MediaError> {
         match &self.backend {
+            #[cfg(feature = "native-video-backends")]
+            VideoDecodeBackend::VaApi => {
+                unsafe {
+                    let mut display = std::ptr::null_mut::<VaDisplay>();
+                    let mut major = 0;
+                    let mut minor = 0;
+                    if vaapi_native::vaInitialize(display, &mut major, &mut minor)
+                        != VA_STATUS_SUCCESS
+                    {
+                        return Err(crate::MediaError::VideoDecodeUnavailable);
+                    }
+                    vaapi_native::vaTerminate(display);
+                }
+                Err(crate::MediaError::VideoDecodeUnavailable)
+            }
+            #[cfg(not(feature = "native-video-backends"))]
             VideoDecodeBackend::VaApi => Err(crate::MediaError::VideoDecodeUnavailable),
             VideoDecodeBackend::VideoToolbox => Err(crate::MediaError::VideoDecodeUnavailable),
             VideoDecodeBackend::MediaCodec => Err(crate::MediaError::VideoDecodeUnavailable),

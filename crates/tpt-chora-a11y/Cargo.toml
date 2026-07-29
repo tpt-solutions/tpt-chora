@@ -16,3 +16,31 @@ categories = ["accessibility", "gui"]
 bitflags = "2.4"
 thiserror = "1.0"
 glam = "0.25"
+
+[features]
+default = []
+native-a11y-backends = [
+    "objc2",
+    "objc2-app-kit",
+    "windows",
+    "jni",
+    "ndk",
+    "ndk-sys",
+]
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_UI_Accessibility",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_Com",
+    "Win32_Foundation",
+], optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6", features = ["alloc", "std"], optional = true }
+objc2-app-kit = { version = "0.3", optional = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = { version = "0.21", optional = true }
+ndk = { version = "0.9", optional = true }
+ndk-sys = { version = "0.6", optional = true }
