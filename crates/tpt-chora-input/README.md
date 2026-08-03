@@ -1,6 +1,6 @@
 # tpt-chora-input
 
-Input and interaction engine for [tpt-chora](https://github.com/tpt-solutions/tpt-chora) ("The Senses"): unified device abstraction, gaze/gesture intent resolution, GPU-based hit testing, and haptics routing.
+Input and interaction engine for [tpt-chora](https://github.com/tpt-solutions/tpt-chora) ("The Senses"): unified device abstraction, gesture intent resolution (gaze is simulated), GPU-based hit testing, and haptics routing.
 
 ## Status
 

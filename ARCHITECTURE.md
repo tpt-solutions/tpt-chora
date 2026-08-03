@@ -30,16 +30,15 @@ crates/
     src/shaders/sdf_text.wgsl
   tpt-chora-spatial/        Phase 3: The Spatial & 3D Engine ("The Depth")
     src/stereoscopic.rs      dual-view stereoscopic rendering, asymmetric frustum
-    src/foveated.rs          3-zone foveated rendering, gaze-driven quality
+    src/foveated.rs          3-zone foveated rendering, gaze-position-driven quality selection (simulated gaze, not hardware eye-tracking)
     src/volumetric.rs        GPU compute volumetric lighting/shadows
     src/spatial_audio.rs     3D-positioned audio, HRTF, head tracking (rodio)
     src/shaders/             stereo.wgsl, volumetric.wgsl
   tpt-chora-input/          Phase 4: The Input & Interaction Engine ("The Senses")
-    src/devices.rs           unified device abstraction (mouse/kb/touch/pen/gamepad/XR)
-    src/intent.rs            gaze/gesture tracking, intent resolution
+    src/devices.rs           unified device abstraction (mouse/kb/touch/pen/gamepad)
+    src/intent.rs            gesture tracking, intent resolution (gaze is simulated)
     src/hit_test.rs          GPU-accelerated BVH hit testing
-    src/haptics.rs           haptic routing (CoreHaptics/Android/XR;
-                             feature-gated `native-haptics-backends`)
+    src/haptics.rs           haptic routing (CoreHaptics/Android; XR rumble is a documented stub)
   tpt-chora-a11y/           Phase 5: The Accessibility & Semantics Engine ("The Bridge")
     src/semantic.rs          Semantic IR (34 roles, 11 states)
     src/bridge.rs            two-way OS accessibility bridge
@@ -131,7 +130,7 @@ crates/
   convergence distance.
 - **Foveated rendering** (`foveated.rs`): 3 concentric quality zones
   (inner/mid/outer) plus full fallback. `compute_foveation_level` selects
-  quality from gaze position; `get_shadow_map_size` returns resolution per
+  quality from a simulated gaze position; `get_shadow_map_size` returns resolution per
   level (2048/1024/512/256).
 - **Volumetric lighting** (`volumetric.rs`): GPU compute shader with ray
   marching, Henyey-Greenstein phase function, scatter/absorption
@@ -144,7 +143,7 @@ crates/
 ### Phase 4: The Input & Interaction Engine
 
 - **Device abstraction** (`devices.rs`): `DeviceCapability` bitflags for
-  mouse/keyboard/touch/pen/gamepad/XR/eye-tracking/gesture. `DeviceEvent`
+  mouse/keyboard/touch/pen/gamepad/eye-tracking/gesture. `DeviceEvent`
   enum covers all input types. State structs track current state per device.
 - **Intent resolution** (`intent.rs`): `IntentResolver` with double-click
   detection (300ms), long-press (500ms), drag threshold (5px). Maps
@@ -154,7 +153,8 @@ crates/
   wraps GPU buffers for hardware-accelerated hit testing.
 - **Haptic routing** (`haptics.rs`): `HapticRouter` detects platform and
   maps `DeviceEvent`s to `HapticPattern`s. Platform-specific methods
-  (CoreHaptics, Android Vibrator, XR rumble) are stub implementations.
+  (CoreHaptics, Android Vibrator) are implemented; XR rumble is a documented
+  stub pending an XR session API.
 
 ### Phase 5: The Accessibility & Semantics Engine
 
@@ -274,11 +274,19 @@ crates/
 
 ## What's still directional
 
-External crate integration: the real `tpt-eidos` (proof-native layout
-compiler), `tpt-archon` (zero-copy state backend), and `tpt-telos`
-(interaction state machine) are stubbed locally in `tpt-chora-runtime`.
-Once those crates are vendored or published, the stubs will be swapped for
-real implementations.
+External crate integration: the real sibling `tpt-eidos`, `tpt-archon`,
+and `tpt-telos` projects were investigated (2026-07-30) and found to
+implement unrelated domains — `tpt-eidos` is a refinement-type verifier
+for safety-critical numeric code (flight control, industrial controls,
+medical dosing), `tpt-archon` is an embedded storage engine + microkernel
++ SQL query stack meant to replace Postgres/SQLite rather than proxy
+them, and `tpt-telos` is a DSL verification/codegen compiler. None
+implement UI layout proofs, zero-copy paged GPU-bindable state, or UI
+event/state-machine processing. `tpt-chora-runtime`'s local
+`telos_stub.rs`/`TelosBackend`, `archon_stub.rs`/`ArchonBackend`, and
+`contracts.rs`'s `ChoraVisualNode`/`ChoraSemanticNode` are therefore the
+permanent implementations of these roles, not placeholders awaiting a
+swap.
 
 Platform-specific hardware integrations now have real, feature-gated,
 best-effort implementations behind opt-in Cargo features:
@@ -291,8 +299,8 @@ best-effort implementations behind opt-in Cargo features:
 - `tpt-chora-input` `native-haptics-backends`: real CoreHaptics
   (macOS/iOS, via `objc2`, unverified on this platform), Android
   Vibrator (via `jni`, unverified on this platform), and XR rumble
-  (documented `HapticNotSupported` stub — no existing XR session type
-  in this codebase to wire it to).
+  (documented `HapticNotSupported` stub — no XR session API
+  is integrated in this codebase).
 - `tpt-chora-media` `native-video-backends`: real Linux VA-API decode
   (via raw FFI to `libva`, CI-verified with `libva-dev`), macOS
   VideoToolbox (via `objc2`, unverified), and Android MediaCodec

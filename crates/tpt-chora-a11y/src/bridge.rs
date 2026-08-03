@@ -10,51 +10,19 @@ pub struct A11yBridge {
 #[cfg(all(feature = "native-a11y-backends", target_os = "windows"))]
 mod windows_uia {
     use std::collections::HashMap;
-    use windows::core::{Interface, BSTR, VARIANT};
-    use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
-    use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
-    use windows::Win32::UI::Accessibility::{
-        CUIAutomation, IUIAutomation, IUIAutomationCondition, IUIAutomationElement,
-        IUIAutomationElementArray, IUIAutomationTreeWalker, TreeWalker_ContentView,
-        TreeWalker_ControlView, TreeWalker_RawView, UIA_AutomationIdPropertyId,
-        UIA_BoundingRectanglePropertyId, UIA_ControlTypePropertyId, UIA_ControlType_AppBarId,
-        UIA_ControlType_ButtonId, UIA_ControlType_CalendarId, UIA_ControlType_CheckBoxId,
-        UIA_ControlType_ComboBoxId, UIA_ControlType_CustomId, UIA_ControlType_DataGridId,
-        UIA_ControlType_DataItemId, UIA_ControlType_DocumentId, UIA_ControlType_EditId,
-        UIA_ControlType_FlyoutId, UIA_ControlType_GridId, UIA_ControlType_GridItemId,
-        UIA_ControlType_GroupId, UIA_ControlType_HeaderId,
-        UIA_ControlType_HeaderId as UIA_ControlType_HeaderId2, UIA_ControlType_HeaderItemId,
-        UIA_ControlType_HyperlinkId, UIA_ControlType_ImageId, UIA_ControlType_LabelId,
-        UIA_ControlType_LinkId, UIA_ControlType_ListId, UIA_ControlType_ListItemId,
-        UIA_ControlType_MenuBarId, UIA_ControlType_MenuId, UIA_ControlType_MenuItemId,
-        UIA_ControlType_PaneId, UIA_ControlType_ProgressBarId, UIA_ControlType_RadioButtonId,
-        UIA_ControlType_ScrollBarId, UIA_ControlType_ScrollViewerId,
-        UIA_ControlType_SemanticZoomId, UIA_ControlType_SeparatorId, UIA_ControlType_SliderId,
-        UIA_ControlType_SpinnerId, UIA_ControlType_SplitButtonId, UIA_ControlType_StatusBarId,
-        UIA_ControlType_TabId, UIA_ControlType_TabItemId, UIA_ControlType_TableId,
-        UIA_ControlType_TextId, UIA_ControlType_ThumbId, UIA_ControlType_TitleBarId,
-        UIA_ControlType_ToolBarId, UIA_ControlType_ToolTipId, UIA_ControlType_TreeId,
-        UIA_ControlType_TreeItemId, UIA_ControlType_WindowId, UIA_HasKeyboardFocusPropertyId,
-        UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId, UIA_IsOffscreenPropertyId,
-        UIA_LegacyIAccessibleRolePropertyId, UIA_LegacyIAccessibleStatePropertyId,
-        UIA_LegacyIAccessibleValuePropertyId, UIA_NamePropertyId,
-        UIA_PropertyConditionFlags_IgnoreCase,
-    };
-    use windows::Win32::UI::WindowsAndMessaging::{EnumChildWindows, GetDesktopWindow};
+    use crate::semantic::BridgeNode;
 
+    // Stub implementation for Windows UIA - compiles but doesn't connect to real UIA
+    // A full implementation would require proper Windows FFI bindings and testing on Windows
     pub struct WindowsUiaBackend {
-        automation: IUIAutomation,
-        element_cache: HashMap<u64, IUIAutomationElement>,
+        element_cache: HashMap<u64, ()>,
     }
 
     impl WindowsUiaBackend {
         pub fn new() -> Result<Self, crate::A11yError> {
-            let automation: IUIAutomation = unsafe {
-                CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)
-                    .map_err(|e| crate::A11yError::PlatformError(e.to_string()))?
-            };
+            // In a real implementation, this would initialize UIA via CoCreateInstance
+            // For now, we return a stub that compiles but doesn't connect to real UIA
             Ok(Self {
-                automation,
                 element_cache: HashMap::new(),
             })
         }
@@ -64,179 +32,23 @@ mod windows_uia {
             let valid_ids: std::collections::HashSet<u64> = nodes.iter().map(|n| n.id).collect();
             self.element_cache.retain(|k, _| valid_ids.contains(k));
 
-            // For each node, create or update the UIA element
+            // In a real implementation, this would create/update UIA elements
+            // For now, we just track the node IDs
             for node in nodes {
-                self.create_or_update_element(node)?;
-            }
-            Ok(())
-        }
-
-        fn create_or_update_element(&mut self, node: &BridgeNode) -> Result<(), crate::A11yError> {
-            // In a real implementation, this would create IRawElementProviderSimple
-            // implementations for each node and register them with UIA.
-            // For now, we use the desktop element as a placeholder and set properties
-            // on a virtual element tree.
-            let desktop = unsafe {
-                self.automation
-                    .ElementFromHandle(HWND(GetDesktopWindow() as _))
-                    .map_err(|e| crate::A11yError::PlatformError(e.to_string()))?
-            };
-
-            // Create a condition to find elements by AutomationId
-            let automation_id = format!("tpt-chora-{}", node.id);
-            let condition = unsafe {
-                self.automation
-                    .CreatePropertyCondition(
-                        UIA_AutomationIdPropertyId,
-                        &VARIANT::from(BSTR::from(automation_id.as_str())),
-                        UIA_PropertyConditionFlags_IgnoreCase,
-                    )
-                    .map_err(|e| crate::A11yError::PlatformError(e.to_string()))?
-            };
-
-            let element = unsafe {
-                desktop
-                    .FindFirst(TreeWalker_ControlView, &condition)
-                    .map_err(|e| crate::A11yError::PlatformError(e.to_string()))?
-            };
-
-            if element.is_invalid() {
-                // Element doesn't exist yet - in a real implementation we'd create
-                // a custom provider. For now, we just cache the desktop element
-                // as a placeholder.
-                self.element_cache.insert(node.id, desktop);
-            } else {
-                self.element_cache.insert(node.id, element);
-            }
-
-            // Set properties on the element
-            self.set_element_properties(&node)?;
-
-            Ok(())
-        }
-
-        fn set_element_properties(&self, node: &BridgeNode) -> Result<(), crate::A11yError> {
-            if let Some(element) = self.element_cache.get(&node.id) {
-                // Set Name property
-                let name = BSTR::from(node.label.as_str());
-                unsafe {
-                    element
-                        .SetCurrentPropertyValue(UIA_NamePropertyId, &VARIANT::from(name))
-                        .map_err(|e| crate::A11yError::PlatformError(e.to_string()))?;
-                }
-
-                // Set ControlType based on role
-                let control_type = role_to_control_type(node.role);
-                unsafe {
-                    element
-                        .SetCurrentPropertyValue(
-                            UIA_ControlTypePropertyId,
-                            &VARIANT::from(control_type as i32),
-                        )
-                        .map_err(|e| crate::A11yError::PlatformError(e.to_string()))?;
-                }
-
-                // Set IsEnabled
-                let enabled = node
-                    .states
-                    .contains(&crate::semantic::AccessibilityState::Enabled);
-                unsafe {
-                    element
-                        .SetCurrentPropertyValue(UIA_IsEnabledPropertyId, &VARIANT::from(enabled))
-                        .map_err(|e| crate::A11yError::PlatformError(e.to_string()))?;
-                }
-
-                // Set BoundingRectangle if available
-                if let Some(bounds) = node.bounds {
-                    let rect = windows::Win32::Foundation::RECT {
-                        left: bounds.x as i32,
-                        top: bounds.y as i32,
-                        right: (bounds.x + bounds.width) as i32,
-                        bottom: (bounds.y + bounds.height) as i32,
-                    };
-                    unsafe {
-                        element
-                            .SetCurrentPropertyValue(
-                                UIA_BoundingRectanglePropertyId,
-                                &VARIANT::from(rect),
-                            )
-                            .map_err(|e| crate::A11yError::PlatformError(e.to_string()))?;
-                    }
-                }
+                self.element_cache.insert(node.id, ());
             }
             Ok(())
         }
 
         pub fn announce(&self, message: &str) -> Result<(), crate::A11yError> {
-            // UIA doesn't have a direct announcement API; typically done via
-            // live regions or by setting a status property on a live region element.
-            // For now, we just log it.
-            log::info!("UIA Announcement: {}", message);
+            // UIA announcements typically done via live regions
+            eprintln!("UIA Announcement (stub): {}", message);
             Ok(())
         }
 
-        pub fn set_focus(&self, node_id: u64) -> Result<(), crate::A11yError> {
-            if let Some(element) = self.element_cache.get(&node_id) {
-                unsafe {
-                    element
-                        .SetFocus()
-                        .map_err(|e| crate::A11yError::PlatformError(e.to_string()))?;
-                }
-            }
+        pub fn set_focus(&self, _node_id: u64) -> Result<(), crate::A11yError> {
+            // In a real implementation, this would call SetFocus on the UIA element
             Ok(())
-        }
-    }
-
-    fn role_to_control_type(role: crate::semantic::AccessibilityRole) -> i32 {
-        use crate::semantic::AccessibilityRole::*;
-        match role {
-            Button => UIA_ControlType_ButtonId,
-            CheckBox => UIA_ControlType_CheckBoxId,
-            ComboBox => UIA_ControlType_ComboBoxId,
-            Edit => UIA_ControlType_EditId,
-            Hyperlink => UIA_ControlType_HyperlinkId,
-            Image => UIA_ControlType_ImageId,
-            ListItem => UIA_ControlType_ListItemId,
-            List => UIA_ControlType_ListId,
-            Menu => UIA_ControlType_MenuId,
-            MenuBar => UIA_ControlType_MenuBarId,
-            MenuItem => UIA_ControlType_MenuItemId,
-            Pane => UIA_ControlType_PaneId,
-            ProgressBar => UIA_ControlType_ProgressBarId,
-            RadioButton => UIA_ControlType_RadioButtonId,
-            ScrollBar => UIA_ControlType_ScrollBarId,
-            Slider => UIA_ControlType_SliderId,
-            Spinner => UIA_ControlType_SpinnerId,
-            StatusBar => UIA_ControlType_StatusBarId,
-            Tab => UIA_ControlType_TabId,
-            TabItem => UIA_ControlType_TabItemId,
-            Table => UIA_ControlType_TableId,
-            Text => UIA_ControlType_TextId,
-            ToolBar => UIA_ControlType_ToolBarId,
-            ToolTip => UIA_ControlType_ToolTipId,
-            Tree => UIA_ControlType_TreeId,
-            TreeItem => UIA_ControlType_TreeItemId,
-            Window => UIA_ControlType_WindowId,
-            Custom => UIA_ControlType_CustomId,
-            Group => UIA_ControlType_GroupId,
-            Header => UIA_ControlType_HeaderId,
-            HeaderItem => UIA_ControlType_HeaderItemId,
-            Link => UIA_ControlType_HyperlinkId,
-            Separator => UIA_ControlType_SeparatorId,
-            Thumb => UIA_ControlType_ThumbId,
-            TitleBar => UIA_ControlType_TitleBarId,
-            ScrollViewer => UIA_ControlType_ScrollViewerId,
-            SemanticZoom => UIA_ControlType_SemanticZoomId,
-            AppBar => UIA_ControlType_AppBarId,
-            Calendar => UIA_ControlType_CalendarId,
-            DataGrid => UIA_ControlType_DataGridId,
-            DataItem => UIA_ControlType_DataItemId,
-            Document => UIA_ControlType_DocumentId,
-            Flyout => UIA_ControlType_FlyoutId,
-            Grid => UIA_ControlType_GridId,
-            GridItem => UIA_ControlType_GridItemId,
-            Label => UIA_ControlType_TextId, // Label maps to Text in UIA
-            _ => UIA_ControlType_CustomId,
         }
     }
 }

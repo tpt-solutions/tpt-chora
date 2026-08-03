@@ -1,6 +1,12 @@
 # tpt-chora-fallback
 
-Three-tier hardware fallback for [tpt-chora](https://github.com/tpt-solutions/tpt-chora): software rasterization, headless output, and dynamic fidelity scaling when full GPU acceleration isn't available, built on [`tpt-chora-render`](https://crates.io/crates/tpt-chora-render).
+Headless output and dynamic fidelity scaling for [tpt-chora](https://github.com/tpt-solutions/tpt-chora).
+
+This crate provides two fallback tiers when full GPU acceleration isn't available:
+- **Headless output** (`headless.rs`): off-screen PNG/JPEG/raw RGBA rendering via the core renderer.
+- **Dynamic fidelity** (`dynamic_fidelity.rs`): 5-tier adaptive quality scaling (Ultra → Minimum) controlling shadows, post-processing, SDF fonts, FPS caps, shadow map sizes, texture limits, MSAA, volumetric lighting, and foveated rendering.
+
+The first fallback tier — automatic software-rasterizer selection (lavapipe/LLVMpipe) — is handled by `wgpu`'s `force_fallback_adapter` in `tpt-chora-render`, not in this crate.
 
 ## Status
 

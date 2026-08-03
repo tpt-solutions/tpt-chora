@@ -6,7 +6,7 @@ Integration contracts for [tpt-chora](https://github.com/tpt-solutions/tpt-chora
 
 Part of tpt-chora's Phase 1 rendering engine. API is pre-1.0 and may change.
 
-The `tpt-eidos`, `tpt-archon`, and `tpt-telos` ecosystem crates this crate is designed to integrate with are still under external development and not yet published; this crate currently uses internal stubs (`archon_stub`, `telos_stub`) in their place. Those stubs will be swapped for real implementations once the upstream crates are available — expect breaking changes at that point.
+The real `tpt-eidos`, `tpt-archon`, and `tpt-telos` sibling projects were investigated (2026-07-30) and found to implement unrelated domains (numeric refinement-type verification; embedded storage/kernel/SQL stack; DSL verification/codegen compiler, respectively) — none implement UI layout proofs, zero-copy paged GPU-bindable state, or UI event/state-machine processing. This crate's local `archon_stub`/`telos_stub` are therefore the permanent implementations of these roles, not placeholders awaiting a swap.
 
 See the workspace [ARCHITECTURE.md](https://github.com/tpt-solutions/tpt-chora/blob/master/ARCHITECTURE.md) for details.
 

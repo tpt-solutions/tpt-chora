@@ -1,6 +1,6 @@
 # tpt-chora-spatial
 
-Spatial and 3D engine for [tpt-chora](https://github.com/tpt-solutions/tpt-chora) ("The Depth"): stereoscopic rendering, foveated rendering, volumetric lighting, and HRTF-based spatial audio.
+Spatial and 3D engine for [tpt-chora](https://github.com/tpt-solutions/tpt-chora) ("The Depth"): stereoscopic rendering, foveated rendering (simulated gaze, not hardware eye-tracking), volumetric lighting, and HRTF-based spatial audio.
 
 ## Status
 

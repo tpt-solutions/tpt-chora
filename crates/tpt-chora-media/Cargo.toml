@@ -20,7 +20,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 
 [features]
 default = []
-native-video-backends = []
+native-video-backends = ["libva-sys"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libva-sys = { version = "0.1", optional = true, features = ["drm"] }

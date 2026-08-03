@@ -4,8 +4,8 @@
 for the TPT ecosystem.**
 
 `tpt-chora` entirely replaces the traditional browser rendering pipeline: it
-natively handles 2D/3D UI rendering, complex typography, spatial computing
-(XR), hardware-accelerated media, multi-modal input, and OS-level
+natively handles 2D/3D UI rendering, complex typography, stereoscopic
+rendering, hardware-accelerated media, multi-modal input, and OS-level
 accessibility. It operates strictly as the "receptacle," reading zero-copy
 memory from [`tpt-archon`](https://github.com/tpt-solutions/tpt-archon)
 (the substrate), consuming proven geometry and semantics from
@@ -54,7 +54,7 @@ See `ARCHITECTURE.md` for details.
 | `tpt-chora-media` | Media & Asset Pipeline ("The Content"): async image/video decoding, asset streaming |
 | `tpt-chora-runtime` | Integration Contracts ("The TPT Trinity"): eidos/archon/telos integration, zero-copy GPU binding |
 | `tpt-chora-inspector` | Developer Experience: Chora Inspector overlay, GPU timing, dirty-rect heatmap, hot reload |
-| `tpt-chora-fallback` | Three-Tier Hardware Fallback: software rasterization, headless output, dynamic fidelity |
+| `tpt-chora-fallback` | Fallback: headless PNG/JPEG output and dynamic fidelity scaling |
 | `tpt-chora-compat` | Migration & Adoption: HTML/CSS transpiler, Wasm/FFI interop, embeddable web component |
 | `tpt-chora-all-subsystems` | Full end-to-end demo binary exercising every subsystem |
 | `tpt-chora-bench` | Benchmarking: tessellation throughput, frame pacing, zero-allocation proof, archon ingestion |

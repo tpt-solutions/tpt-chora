@@ -44,7 +44,7 @@ impl ChoraInspector {
         let overlay_pipeline = Self::create_overlay_pipeline(device, width, height);
         Self {
             config: InspectorConfig::default(),
-            gpu_timer: GpuTimer::new(device),
+            gpu_timer: GpuTimer::new(device, 256),
             dirty_tracker: DirtyRectTracker::new(),
             heatmap: OverdrawHeatmap::new(width, height),
             color_proof: ColorBlindnessMode::None,
@@ -164,12 +164,12 @@ impl ChoraInspector {
         self.dirty_tracker.mark_dirty(x, y, width, height);
     }
 
-    pub fn end_frame(&mut self) -> InspectorFrameData {
+    pub fn end_frame(&mut self, device: &wgpu::Device) -> InspectorFrameData {
         InspectorFrameData {
             draw_calls: self.draw_call_count,
             triangles: self.triangle_count,
             dirty_rects: self.dirty_tracker.current_dirty_rects(),
-            gpu_timings: self.gpu_timer.readback(),
+            gpu_timings: self.gpu_timer.readback(device),
         }
     }
 

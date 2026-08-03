@@ -1,6 +1,6 @@
 [package]
 name = "tpt-chora-fallback"
-description = "tpt-chora Three-Tier Hardware Fallback: software rasterization, headless output, dynamic fidelity"
+description = "tpt-chora fallback: headless output and dynamic fidelity scaling"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,7 @@ authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
 readme = "README.md"
-keywords = ["fallback", "software-rendering", "headless", "fidelity", "rasterization"]
+keywords = ["fallback", "headless", "fidelity"]
 categories = ["rendering", "hardware-support"]
 
 [dependencies]

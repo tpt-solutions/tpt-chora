@@ -28,16 +28,16 @@
 
 ## Phase 3: The Spatial & 3D Engine (The Depth)
 - [x] Implement stereoscopic rendering (dual-view, automated asymmetric frustum projection for VR/AR) (`crates/tpt-chora-spatial/src/stereoscopic.rs`)
-- [x] Integrate foveated rendering driven by eye-tracking (`crates/tpt-chora-spatial/src/foveated.rs` — 3-zone quality model, gaze-driven level selection)
+- [x] Implement foveated rendering with gaze-driven quality selection (`crates/tpt-chora-spatial/src/foveated.rs` — 3-zone quality model, gaze-position-driven level selection; gaze is simulated, not hardware eye-tracking)
 - [x] Implement volumetric lighting/shadows (GPU compute shadow mapping, real-time global illumination) respecting tpt-eidos `elevation` (`crates/tpt-chora-spatial/src/volumetric.rs`, `src/shaders/volumetric.wgsl`)
 - [x] Integrate spatial audio (3D-positioned sources, HRTF via head tracking; rodio/OpenAL) (`crates/tpt-chora-spatial/src/spatial_audio.rs`)
-- [x] **Milestone:** A stereoscopic scene with real-time shadows and a head-tracked spatial audio source running at target XR framerate.
+- [x] **Milestone:** A stereoscopic scene with real-time shadows and a spatial audio source running at target framerate.
 
 ## Phase 4: The Input & Interaction Engine (The Senses)
-- [x] Build unified device abstraction (mouse, keyboard, touch, pen/stylus, gamepad, XR controllers) into one capability-based event stream (`crates/tpt-chora-input/src/devices.rs`)
-- [x] Integrate gaze/gesture tracking and intent abstraction (Gaze+Pinch, Mouse Down, Touch Tap) (`crates/tpt-chora-input/src/intent.rs`)
+- [x] Build unified device abstraction (mouse, keyboard, touch, pen/stylus, gamepad) into one capability-based event stream (`crates/tpt-chora-input/src/devices.rs`)
+- [x] Integrate gaze/gesture tracking and intent abstraction (Gaze+Pinch is simulated; Mouse Down, Touch Tap) (`crates/tpt-chora-input/src/intent.rs`)
 - [x] Implement GPU-accelerated hit testing (depth buffer + bounding volume hierarchies, no DOM traversal) (`crates/tpt-chora-input/src/hit_test.rs`)
-- [x] Route haptics to OS-level APIs (CoreHaptics, Android Vibrator, XR controller rumble) (`crates/tpt-chora-input/src/haptics.rs`)
+- [x] Route haptics to OS-level APIs (CoreHaptics, Android Vibrator; XR controller rumble is a documented stub) (`crates/tpt-chora-input/src/haptics.rs`)
 - [x] **Milestone:** A hit-test demo where mouse, touch, and simulated gaze+pinch all resolve to the same component intent.
 
 ## Phase 5: The Accessibility & Semantics Engine (The Bridge)
@@ -55,7 +55,7 @@
 ## Phase 7: Integration Contracts (The TPT Trinity)
 - [x] Consume `ChoraVisualNode` from tpt-eidos (transform, geometry, material, clip_mask, z_depth) (`crates/tpt-chora-runtime/src/contracts.rs`)
 - [x] Wire the shared `ChoraSemanticNode` IR types (builds on Phase 5) (`crates/tpt-chora-runtime/src/contracts.rs`)
-- [x] Implement zero-copy `ArchonPage` → GPU buffer mapping (`bind_state_to_gpu`) — stub the `ArchonPage` type locally until `tpt-archon` can be vendored from https://github.com/tpt-solutions/tpt-archon, then swap in the real crate (`crates/tpt-chora-runtime/src/archon_stub.rs`)
+- [x] Implement zero-copy `ArchonPage` → GPU buffer mapping (`bind_state_to_gpu`) — `ArchonPage` is a permanent local type (`crates/tpt-chora-runtime/src/archon_stub.rs`); the real `tpt-archon` (github.com/tpt-solutions/tpt-archon) is an embedded storage engine/kernel/SQL stack with no equivalent concept, so no swap is planned
 - [x] Wire input → tpt-telos state transitions (`on_interaction`: hit test confirms target via Eidos proofs → `telos.process_event` → `archon.apply_mutation` → next-frame Eidos re-proof/Chora re-render) (`crates/tpt-chora-runtime/src/telos_stub.rs`)
 - [x] **Milestone:** A full round-trip demo — a click fires a telos transition, mutates archon-backed memory, and next frame re-renders via re-proved eidos layout.
 
@@ -88,7 +88,7 @@
 
 ## Phase 12: Migration & Adoption Path
 - [x] Build the `<tpt-chora>` embeddable Web Component ("Trojan Horse" strategy) for dropping into existing React/Vue/HTML apps (`crates/tpt-chora-compat/src/web_component.rs`)
-- [x] Build the "Rosetta Stone" legacy HTML/CSS → Chora-IR transpiler via the tpt-eidos compiler, with safety-proof violation warnings and auto-correction (`crates/tpt-chora-compat/src/css_parser.rs`, `src/eidos_transpiler.rs`)
+- [x] Build the "Rosetta Stone" legacy HTML/CSS → Chora-IR transpiler, with safety-proof violation warnings and auto-correction (`crates/tpt-chora-compat/src/css_parser.rs`, `src/eidos_transpiler.rs` — a fully self-contained local reimplementation; it never calls the real `tpt-eidos` crate, which implements an unrelated numeric-verification domain)
 - [x] Implement WebAssembly/FFI interop via tpt-telos so existing JS/Python/Java business logic can bridge into tpt-archon's zero-copy memory without a rewrite (`crates/tpt-chora-compat/src/ffi_bridge.rs`)
 - [x] **Milestone:** An existing React app embeds `<tpt-chora>` for one component, and a sample legacy CSS file transpiles with a reported auto-corrected violation.
 
@@ -138,7 +138,7 @@ piece); this phase is the honest "what's left" list.
 - [x] Phase 12: give `FfiBridge::call_function` a real Wasm execution engine (e.g. `wasmtime`) — `FfiBridge` now compiles/instantiates modules via `wasmtime::{Module, Store, Linker}` and `call_function` decodes packed args per the callee's real param types and actually invokes it (`crates/tpt-chora-compat/src/ffi_bridge.rs`)
 - [x] Phase 12: connect `web_component.rs::render()` to real renderer output — now uses `tpt_chora_render::Renderer` when available, falls back to placeholder on GPU init failure (`crates/tpt-chora-compat/src/web_component.rs`)
 - [x] Phase 13: use the `shader_urls` field in the generated bootstrap script (shader fetch loop generated per-URL), and added `wasm_binary_size_bytes()` accessor for accurate Wasm size measurement (`crates/tpt-chora-compat/src/deployment/bootstrap.rs`)
-- [x] Phase 7: give `archon_stub`/`telos_stub` a real trait boundary (`ArchonBackend`/`TelosBackend` traits) so swapping in the real `tpt-archon`/`tpt-telos` crates later doesn't require touching every call site (`crates/tpt-chora-runtime/src/archon_stub.rs`, `src/telos_stub.rs`, `src/lib.rs`)
+- [x] Phase 7: give `archon_stub`/`telos_stub` a real trait boundary (`ArchonBackend`/`TelosBackend` traits) as a clean seam with real test coverage (`crates/tpt-chora-runtime/src/archon_stub.rs`, `src/telos_stub.rs`, `src/lib.rs`) — not a placeholder awaiting a swap: the real `tpt-archon`/`tpt-telos` crates were investigated (2026-07-30) and found to implement unrelated domains, so no swap is planned
 
 ### Dependency hygiene
 - [x] Track replacements for unmaintained transitive deps flagged by `cargo audit` (no known vulnerabilities, just unmaintained):
@@ -352,10 +352,11 @@ production-ready code, until compiled/tested on real hardware.
   no existing XR session type in this codebase to wire it to
   (`crates/tpt-chora-input/src/haptics.rs`)
 - [x] `tpt-chora-media` `native-video-backends` feature: real Linux VA-API
-  decode via raw FFI to `libva` (CI-verified — `libva-dev` added to the
-  `verify` job and the feature enabled there); macOS VideoToolbox via
-  `objc2` (unverified); Android MediaCodec via `jni` + NDK media APIs
-  (unverified) (`crates/tpt-chora-media/src/decode.rs`)
+  decode via raw FFI to `libva` (handshake verified; frame decode requires
+  H.264 bitstream parsing — SPS dimension extraction implemented, actual
+  pixel decode pending); macOS VideoToolbox via `objc2` (unverified);
+  Android MediaCodec via `jni` + NDK media APIs (unverified)
+  (`crates/tpt-chora-media/src/decode.rs`)
 - [x] Expand `.github/workflows/ci.yml`'s `verify` job to a
   `windows-latest`/`macos-latest`/`ubuntu-latest` matrix (GPU/lavapipe
   test steps stay Linux-only) so the new Windows and macOS platform code
@@ -395,3 +396,39 @@ production-ready code, until compiled/tested on real hardware.
   clean; the three new examples run; `tpt-chora audit` produces a
   consolidated report; macOS/Android platform-backend code is explicitly
   flagged as unverified by any build in this environment, not masked as done.
+
+## Phase 20: Close Known Functionality Gaps (2026-07-30 audit findings)
+- [ ] Video decoding: `decode_frame` (`crates/tpt-chora-media/src/decode.rs:249-272`)
+  unconditionally returns `Err(VideoDecodeUnavailable)` on every backend path — the
+  VA-API branch does a real `vaInitialize`/`vaTerminate` handshake but then always
+  errors regardless of outcome, and `_encoded_data` is unused, so no frame is ever
+  decoded. This contradicts this file's own Phase 19 claim of "real Linux VA-API
+  decode... CI-verified." Implement actual frame decode for at least one backend
+  (VA-API is closest, since the handshake already works), or correct the Phase 19
+  wording above to describe the current handshake-only/always-errors behavior.
+- [ ] Accessibility: the OS bridge (`crates/tpt-chora-a11y/src/bridge.rs`) makes
+  real Windows UIA COM calls, but `create_or_update_element`'s own comment
+  (lines 75-78) admits it operates on "the desktop element as a placeholder"
+  instead of a custom automation provider exposing `ChoraSemanticNode` content
+  (role/label/state/children) — so nothing rendered by `tpt-chora` is actually
+  exposed to a screen reader yet. Build the real provider.
+- [ ] GPU frame timing: `resolve_queries` (`crates/tpt-chora-inspector/src/gpu_timing.rs:88-114`)
+  issues real `wgpu` timestamp-query calls but never maps/reads the resolved
+  `destination` buffer — `elapsed_ns` is computed from
+  `(end_idx - start_idx) * timestamp_period` (query-slot index arithmetic), not
+  an actual GPU-reported duration. Read back the resolved buffer via
+  `map_async`/`get_mapped_range` and compute `elapsed_ns` from the real
+  timestamp values.
+- [ ] Fallback tier: `tpt-chora-fallback` is framed as "three-tier," but only a
+  windowless GPU renderer (`headless.rs`) and a settings struct
+  (`dynamic_fidelity.rs`) exist — no CPU/software rasterization path. Either
+  implement a real software rasterizer tier, or correct the crate's
+  Cargo.toml/README to describe only the two tiers that actually exist.
+- [ ] XR: `tpt-chora-spatial`/`tpt-chora-input`'s "spatial computing (XR)" and
+  gaze claims are stereo-rendering math and foveation heuristics only — there's
+  no OpenXR or headset/controller/gaze hardware binding anywhere
+  (`XrControllerRumble` is an explicit documented dead-code stub with no XR
+  session to attach to). Either integrate a real device/session API (OpenXR)
+  for at least one of headset tracking/controller input/gaze, or reword the
+  XR/gaze claims in `README.md`, `ARCHITECTURE.md`, and Phase 3/4 above to
+  describe what exists today.
