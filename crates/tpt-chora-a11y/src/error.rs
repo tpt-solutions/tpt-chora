@@ -10,4 +10,6 @@ pub enum A11yError {
     BridgeUnavailable,
     #[error("semantic node has invalid role transition")]
     InvalidRoleTransition,
+    #[error("OS accessibility platform call failed: {0}")]
+    PlatformError(String),
 }

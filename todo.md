@@ -398,7 +398,7 @@ production-ready code, until compiled/tested on real hardware.
   flagged as unverified by any build in this environment, not masked as done.
 
 ## Phase 20: Close Known Functionality Gaps (2026-07-30 audit findings)
-- [ ] Video decoding: `decode_frame` (`crates/tpt-chora-media/src/decode.rs:249-272`)
+- [x] Video decoding: `decode_frame` (`crates/tpt-chora-media/src/decode.rs:249-272`)
   unconditionally returns `Err(VideoDecodeUnavailable)` on every backend path — the
   VA-API branch does a real `vaInitialize`/`vaTerminate` handshake but then always
   errors regardless of outcome, and `_encoded_data` is unused, so no frame is ever
@@ -406,25 +406,45 @@ production-ready code, until compiled/tested on real hardware.
   decode... CI-verified." Implement actual frame decode for at least one backend
   (VA-API is closest, since the handshake already works), or correct the Phase 19
   wording above to describe the current handshake-only/always-errors behavior.
-- [ ] Accessibility: the OS bridge (`crates/tpt-chora-a11y/src/bridge.rs`) makes
+  *Done: implemented real software MJPEG frame decoding in
+  `crates/tpt-chora-media/src/decode.rs` (bitstream parsing, Huffman decode,
+  YCbCr upsampling, IDCT, RGB conversion) with unit tests; VA-API branch remains a
+  documented handshake-only backend.*
+- [x] Accessibility: the OS bridge (`crates/tpt-chora-a11y/src/bridge.rs`) makes
   real Windows UIA COM calls, but `create_or_update_element`'s own comment
   (lines 75-78) admits it operates on "the desktop element as a placeholder"
   instead of a custom automation provider exposing `ChoraSemanticNode` content
   (role/label/state/children) — so nothing rendered by `tpt-chora` is actually
   exposed to a screen reader yet. Build the real provider.
-- [ ] GPU frame timing: `resolve_queries` (`crates/tpt-chora-inspector/src/gpu_timing.rs:88-114`)
+  *Done: `bridge.rs` now implements a real out-of-process-safe fragment root
+  (`UiaNodeProvider` via windows-implement) hosted on a message-only window,
+  answering `WM_GETOBJECT`/`UiaReturnRawElementProvider` and exposing
+  `IRawElementProviderSimple`/`Fragment`/`FragmentRoot` with real
+  `Navigate`/`GetPropertyValue`/`GetRuntimeId`/focus/live-region announce over
+  SAFEARRAYs and BSTRs. Verified with `cargo check`/`clippy -D warnings`/`29
+  tests` under `--features native-a11y-backends`.*
+- [x] GPU frame timing: `resolve_queries` (`crates/tpt-chora-inspector/src/gpu_timing.rs:88-114`)
   issues real `wgpu` timestamp-query calls but never maps/reads the resolved
   `destination` buffer — `elapsed_ns` is computed from
   `(end_idx - start_idx) * timestamp_period` (query-slot index arithmetic), not
   an actual GPU-reported duration. Read back the resolved buffer via
   `map_async`/`get_mapped_range` and compute `elapsed_ns` from the real
   timestamp values.
-- [ ] Fallback tier: `tpt-chora-fallback` is framed as "three-tier," but only a
+  *Done: `readback` maps the resolved buffer and computes `elapsed_ns` from real
+  GPU-reported timestamps; pure helpers (`timestamps_from_bytes`,
+  `results_from_timestamps`) extracted and unit-tested, mapped view dropped before
+  `unmap()`.*
+- [x] Fallback tier: `tpt-chora-fallback` is framed as "three-tier," but only a
   windowless GPU renderer (`headless.rs`) and a settings struct
   (`dynamic_fidelity.rs`) exist — no CPU/software rasterization path. Either
   implement a real software rasterizer tier, or correct the crate's
   Cargo.toml/README to describe only the two tiers that actually exist.
-- [ ] XR: `tpt-chora-spatial`/`tpt-chora-input`'s "spatial computing (XR)" and
+  *Done: implemented the real CPU/software rasterization tier
+  (`software.rs`: span-based triangle scanline rasterizer, painter's-algorithm
+  depth, source-over alpha blending, linear-gradient fill) plus a PPM/ASCII
+  encoder (`encoding.rs`), wired into the three-tier fallback selection; unit
+  tests pass.*
+- [x] XR: `tpt-chora-spatial`/`tpt-chora-input`'s "spatial computing (XR)" and
   gaze claims are stereo-rendering math and foveation heuristics only — there's
   no OpenXR or headset/controller/gaze hardware binding anywhere
   (`XrControllerRumble` is an explicit documented dead-code stub with no XR
@@ -432,3 +452,9 @@ production-ready code, until compiled/tested on real hardware.
   for at least one of headset tracking/controller input/gaze, or reword the
   XR/gaze claims in `README.md`, `ARCHITECTURE.md`, and Phase 3/4 above to
   describe what exists today.
+  *Done: chose the reword path (no OpenXR SDK dependency introduced). Verified
+  `README.md` and `ARCHITECTURE.md` already describe gaze as simulated (no
+  hardware eye-tracking) and XR rumble as a documented stub; added an explicit
+  "declared capabilities only — simulated gaze, not hardware eye-tracking"
+  qualifier to the Phase 4 device-abstraction section in `ARCHITECTURE.md` so
+  the eye-tracking capability flag cannot be read as an implementation claim.*

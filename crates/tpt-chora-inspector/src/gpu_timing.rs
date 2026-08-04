@@ -2,7 +2,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 pub struct GpuTimer {
     queries: Vec<TimingQuery>,
-    results: Vec<TimingResult>,
     next_id: u32,
     query_set: wgpu::QuerySet,
     destination: wgpu::Buffer,
@@ -45,7 +44,6 @@ impl GpuTimer {
 
         Self {
             queries: Vec::new(),
-            results: Vec::new(),
             next_id: 0,
             query_set,
             destination,
@@ -127,36 +125,122 @@ impl GpuTimer {
             std::thread::yield_now();
         }
 
-        let mapped_data = buffer_slice.get_mapped_range();
-        let timestamps: Vec<u64> = mapped_data
-            .chunks_exact(8)
-            .map(|chunk| u64::from_le_bytes(chunk.try_into().unwrap()))
-            .collect();
-
-        for query in &self.queries {
-            if query.start_recorded && query.end_recorded {
-                let start_idx = query.start_query_idx as usize;
-                let end_idx = query.end_query_idx as usize;
-                if start_idx < timestamps.len() && end_idx < timestamps.len() {
-                    let start = timestamps[start_idx];
-                    let end = timestamps[end_idx];
-                    let elapsed_ns = (end.saturating_sub(start)) as f64 * self.timestamp_period;
-                    self.results.push(TimingResult {
-                        label: query.label.clone(),
-                        elapsed_ns,
-                    });
-                }
-            }
-        }
+        let timestamps = {
+            // SAFETY: the buffer is mapped; the view is dropped before
+            // `unmap()` below so the map is not released while borrowed.
+            let mapped_data = buffer_slice.get_mapped_range();
+            timestamps_from_bytes(&mapped_data)
+        };
 
         self.destination.unmap();
 
-        let results = self.results.clone();
-        self.results.clear();
-        results
+        results_from_timestamps(&self.queries, &timestamps, self.timestamp_period)
     }
 
     pub fn active_query_count(&self) -> usize {
         self.queries.len()
+    }
+}
+
+fn timestamps_from_bytes(bytes: &[u8]) -> Vec<u64> {
+    bytes
+        .chunks_exact(8)
+        .map(|chunk| u64::from_le_bytes(chunk.try_into().unwrap()))
+        .collect()
+}
+
+fn results_from_timestamps(
+    queries: &[TimingQuery],
+    timestamps: &[u64],
+    timestamp_period: f64,
+) -> Vec<TimingResult> {
+    let mut results = Vec::new();
+    for query in queries {
+        if !(query.start_recorded && query.end_recorded) {
+            continue;
+        }
+        let start = timestamps.get(query.start_query_idx as usize);
+        let end = timestamps.get(query.end_query_idx as usize);
+        if let (Some(&start), Some(&end)) = (start, end) {
+            results.push(TimingResult {
+                label: query.label.clone(),
+                elapsed_ns: end.saturating_sub(start) as f64 * timestamp_period,
+            });
+        }
+    }
+    results
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn results_are_computed_from_real_timestamp_values() {
+        let queries = vec![
+            TimingQuery {
+                id: 0,
+                label: "scene".into(),
+                start_query_idx: 0,
+                end_query_idx: 1,
+                start_recorded: true,
+                end_recorded: true,
+            },
+            TimingQuery {
+                id: 1,
+                label: "postprocess".into(),
+                start_query_idx: 2,
+                end_query_idx: 3,
+                start_recorded: true,
+                end_recorded: true,
+            },
+        ];
+        let timestamps = [1_000_000, 2_000_000, 7_000_000, 9_000_000];
+        let results = results_from_timestamps(&queries, &timestamps, 0.5);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].label, "scene");
+        assert_eq!(results[0].elapsed_ns, 500_000.0);
+        assert_eq!(results[1].label, "postprocess");
+        assert_eq!(results[1].elapsed_ns, 1_000_000.0);
+    }
+
+    #[test]
+    fn unrecorded_queries_are_skipped() {
+        let queries = vec![TimingQuery {
+            id: 0,
+            label: "never-recorded".into(),
+            start_query_idx: 0,
+            end_query_idx: 1,
+            start_recorded: false,
+            end_recorded: false,
+        }];
+        let results = results_from_timestamps(&queries, &[1, 2], 1.0);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn missing_timestamp_slots_are_skipped() {
+        let queries = vec![TimingQuery {
+            id: 0,
+            label: "partial".into(),
+            start_query_idx: 0,
+            end_query_idx: 9,
+            start_recorded: true,
+            end_recorded: true,
+        }];
+        let results = results_from_timestamps(&queries, &[1, 2], 1.0);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn timestamps_are_parsed_as_le_u64s() {
+        let mut bytes = Vec::new();
+        for ts in [0x0102_0304_0506_0708u64, 0x0100_0000_0000_0000u64] {
+            bytes.extend_from_slice(&ts.to_le_bytes());
+        }
+        assert_eq!(
+            timestamps_from_bytes(&bytes),
+            vec![0x0102_0304_0506_0708, 0x0100_0000_0000_0000]
+        );
     }
 }

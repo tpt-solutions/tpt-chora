@@ -58,8 +58,9 @@ crates/
     src/heatmap.rs           overdraw heatmap (8x8 cells)
     src/color_proof.rs       color-blindness simulation (6 modes)
     src/hot_reload.rs        file watcher (eidos/shader/asset change detection)
-  tpt-chora-fallback/       Phase 11: Three-Tier Hardware Fallback
-    src/headless.rs          headless PNG/JPEG/raw RGBA output
+  tpt-chora-fallback/       Phase 11: Hardware & Software Fallback
+    src/software.rs         CPU software rasterizer (no GPU/wgpu required)
+    src/headless.rs         headless PNG/JPEG/raw RGBA output
     src/dynamic_fidelity.rs  5-tier adaptive fidelity (Ultra→Minimum)
   tpt-chora-compat/         Phase 12: Migration & Adoption
     src/css_parser.rs        hand-written CSS tokenizer
@@ -145,6 +146,8 @@ crates/
 - **Device abstraction** (`devices.rs`): `DeviceCapability` bitflags for
   mouse/keyboard/touch/pen/gamepad/eye-tracking/gesture. `DeviceEvent`
   enum covers all input types. State structs track current state per device.
+  Gaze/eye-tracking are declared capabilities only — the input pipeline
+  consumes a simulated gaze position, not hardware eye-tracking.
 - **Intent resolution** (`intent.rs`): `IntentResolver` with double-click
   detection (300ms), long-press (500ms), drag threshold (5px). Maps
   `GestureIntent` to `InteractionIntent` (20 variants).
@@ -229,12 +232,16 @@ crates/
 - **Hot reload** (`hot_reload.rs`): file watcher polling modification times,
   `ReloadEvent` for eidos/shader/asset changes.
 
-### Phase 11: Three-Tier Fallback
+### Phase 11: Hardware & Software Fallback
 
-- **Tier 1** — wgpu auto-selects software backend (lavapipe/LLVMpipe) when
-  no hardware adapter is found.
+- **Tier 1** — CPU software rasterizer (`software.rs`): renders an
+  immediate-mode scene graph of rect/circle/triangle/line primitives into an
+  RGBA8 framebuffer with supersampled antialiasing and alpha blending,
+  entirely on the CPU with no GPU adapter or `wgpu` dependency.
 - **Tier 2** — `HeadlessRenderer` wraps the core renderer, outputs PNG/JPEG/
-  raw RGBA via `render_frame` or `render_frame_to_file`.
+  raw RGBA via `render_frame` or `render_frame_to_file` (wgpu also
+  auto-selects a software backend such as lavapipe/LLVMpipe when no hardware
+  adapter is found).
 - **Tier 3** — `DynamicFidelity` with 5 profiles (Ultra/High/Medium/Low/
   Minimum) controlling shadows, post-processing, SDF fonts, FPS caps,
   shadow map sizes, texture limits, MSAA, volumetric lighting, foveated

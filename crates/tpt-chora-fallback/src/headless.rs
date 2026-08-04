@@ -31,52 +31,12 @@ impl HeadlessRenderer {
             .render_frame()
             .map_err(|e| crate::FallbackError::EncodeFailed(e.to_string()))?;
 
-        match self.config.output_format {
-            OutputFormat::RawRgba => Ok(pixels),
-            OutputFormat::Png => self.encode_png(&pixels),
-            OutputFormat::Jpeg => self.encode_jpeg(&pixels),
-        }
-    }
-
-    fn encode_png(&self, pixels: &[u8]) -> Result<Vec<u8>, crate::FallbackError> {
-        let mut output = Vec::new();
-        {
-            let mut encoder = png::Encoder::new(
-                std::io::Cursor::new(&mut output),
-                self.config.width,
-                self.config.height,
-            );
-            encoder.set_color(png::ColorType::Rgba);
-            encoder.set_depth(png::BitDepth::Eight);
-            let mut writer = encoder
-                .write_header()
-                .map_err(|e| crate::FallbackError::EncodeFailed(e.to_string()))?;
-            writer
-                .write_image_data(pixels)
-                .map_err(|e| crate::FallbackError::EncodeFailed(e.to_string()))?;
-        }
-        Ok(output)
-    }
-
-    fn encode_jpeg(&self, pixels: &[u8]) -> Result<Vec<u8>, crate::FallbackError> {
-        let rgb: Vec<u8> = pixels
-            .chunks_exact(4)
-            .flat_map(|rgba| [rgba[0], rgba[1], rgba[2]])
-            .collect();
-
-        let mut buf = std::io::Cursor::new(Vec::new());
-        let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 85);
-        use image::ImageEncoder;
-        encoder
-            .write_image(
-                &rgb,
-                self.config.width,
-                self.config.height,
-                image::ColorType::Rgb8.into(),
-            )
-            .map_err(|e| crate::FallbackError::EncodeFailed(e.to_string()))?;
-
-        Ok(buf.into_inner())
+        crate::encoding::encode_pixels(
+            &pixels,
+            self.config.width,
+            self.config.height,
+            self.config.output_format,
+        )
     }
 
     pub fn render_frame_to_file(&self, path: &std::path::Path) -> Result<(), crate::FallbackError> {

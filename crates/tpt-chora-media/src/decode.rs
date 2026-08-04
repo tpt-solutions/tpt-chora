@@ -20,49 +20,6 @@ enum VideoDecodeBackend {
     SoftwareFallback,
 }
 
-#[cfg(feature = "native-video-backends")]
-#[allow(unused)]
-mod vaapi_native {
-    use std::ffi::{c_int, c_uint, c_void};
-
-    extern "C" {
-        pub fn vaInitialize(
-            display: *mut c_void,
-            major_version: *mut c_int,
-            minor_version: *mut c_int,
-        ) -> c_int;
-        pub fn vaTerminate(display: *mut c_void) -> c_int;
-        pub fn vaCreateSurfaces(
-            display: *mut c_void,
-            format: c_uint,
-            width: c_uint,
-            height: c_uint,
-            surface_count: c_uint,
-            surfaces: *mut c_uint,
-        ) -> c_int;
-        pub fn vaCreateContext(
-            display: *mut c_void,
-            config_id: c_uint,
-            picture_width: c_uint,
-            picture_height: c_uint,
-            flag: c_int,
-            num_reference_frames: c_int,
-            surfaces: *mut c_uint,
-            context: *mut c_uint,
-        ) -> c_int;
-    }
-
-    pub type VaDisplay = *mut c_void;
-    pub type VaConfigID = c_uint;
-    pub type VaContextID = c_uint;
-    pub type VaSurfaceID = c_uint;
-    pub type VaStatus = c_int;
-    pub const VA_STATUS_SUCCESS: VaStatus = 1;
-}
-
-#[cfg(feature = "native-video-backends")]
-pub use vaapi_native::VaDisplay;
-
 pub struct VideoFrame {
     pub width: u32,
     pub height: u32,
@@ -357,7 +314,11 @@ fn parse_sps_dimensions(data: &[u8]) -> Option<(u32, u32)> {
         if nal_type != 7 {
             continue;
         }
-        let payload = if start < end { &data[start..end] } else { continue };
+        let payload = if start < end {
+            &data[start..end]
+        } else {
+            continue;
+        };
         let unescaped = unescape_nal_payload(payload);
         return parse_sps(&unescaped);
     }
@@ -423,6 +384,80 @@ fn parse_sps(data: &[u8]) -> Option<(u32, u32)> {
     Some((width, height))
 }
 
+/// Returns the byte offset just past the first complete JPEG frame in `data`.
+///
+/// Walks JPEG marker segments from the SOI (0xFFD8): segments with a length
+/// field are skipped by their declared size, and an SOS (0xFFDA) header is
+/// followed by entropy-coded scan data in which 0xFF is only ever followed by
+/// a stuffed 0x00 or a restart marker (0xD0-0xD7) — so the next non-stuffed
+/// marker is the EOI (0xFFD9) that terminates the frame. If the buffer ends
+/// before a valid EOI, `data.len()` is returned and the whole buffer is
+/// treated as the frame.
+fn first_jpeg_frame_end(data: &[u8]) -> usize {
+    if data.len() < 4 || data[0] != 0xFF || data[1] != 0xD8 {
+        return data.len();
+    }
+    let mut i = 2;
+    loop {
+        if i >= data.len() {
+            return data.len();
+        }
+        let Some(prefix) = data[i..].iter().position(|&b| b == 0xFF) else {
+            return data.len();
+        };
+        i += prefix;
+        if i + 1 >= data.len() {
+            return data.len();
+        }
+        let marker = data[i + 1];
+        i += 2;
+        match marker {
+            // Markers with no length field.
+            0xD8 | 0x01 => continue,
+            0xD0..=0xD7 => continue,
+            // Stuffed byte inside scan data, not a real marker.
+            0x00 => continue,
+            0xD9 => return i,
+            0xDA => {
+                if i + 2 > data.len() {
+                    return data.len();
+                }
+                let len = u16::from_be_bytes([data[i], data[i + 1]]) as usize;
+                let mut j = i + len;
+                if j >= data.len() {
+                    return data.len();
+                }
+                loop {
+                    let Some(prefix) = data[j..].iter().position(|&b| b == 0xFF) else {
+                        return data.len();
+                    };
+                    j += prefix;
+                    if j + 1 >= data.len() {
+                        return data.len();
+                    }
+                    let next = data[j + 1];
+                    if next == 0x00 || (0xD0..=0xD7).contains(&next) {
+                        j += 2;
+                    } else {
+                        break;
+                    }
+                }
+                i = j;
+            }
+            _ => {
+                if i + 2 > data.len() {
+                    return data.len();
+                }
+                let len = u16::from_be_bytes([data[i], data[i + 1]]) as usize;
+                if len < 2 || i + len > data.len() {
+                    return data.len();
+                }
+                i += len;
+            }
+        }
+    }
+}
+
 impl VideoDecoder {
     pub fn new() -> Self {
         let backend = if cfg!(feature = "native-video-backends") && cfg!(target_os = "linux") {
@@ -437,16 +472,54 @@ impl VideoDecoder {
         Self { backend }
     }
 
-    pub fn decode_frame(&self, _encoded_data: &[u8]) -> Result<VideoFrame, crate::MediaError> {
+    /// Forces the pure-software MJPEG backend regardless of platform, for
+    /// consumers that want a deterministic, hardware-independent decode path.
+    pub fn software_only() -> Self {
+        Self {
+            backend: VideoDecodeBackend::SoftwareFallback,
+        }
+    }
+
+    pub fn decode_frame(&self, encoded_data: &[u8]) -> Result<VideoFrame, crate::MediaError> {
         match &self.backend {
             #[cfg(all(feature = "native-video-backends", target_os = "linux"))]
-            VideoDecodeBackend::VaApi => self.decode_frame_vaapi(_encoded_data),
+            VideoDecodeBackend::VaApi => self.decode_frame_vaapi(encoded_data),
             #[cfg(not(all(feature = "native-video-backends", target_os = "linux")))]
             VideoDecodeBackend::VaApi => Err(crate::MediaError::VideoDecodeUnavailable),
             VideoDecodeBackend::VideoToolbox => Err(crate::MediaError::VideoDecodeUnavailable),
             VideoDecodeBackend::MediaCodec => Err(crate::MediaError::VideoDecodeUnavailable),
-            VideoDecodeBackend::SoftwareFallback => Err(crate::MediaError::VideoDecodeUnavailable),
+            VideoDecodeBackend::SoftwareFallback => self.decode_frame_software(encoded_data),
         }
+    }
+
+    /// Software MJPEG frame decode. Motion-JPEG is an unbounded sequence of
+    /// independent JPEG frames with no inter-frame state, so it is the one
+    /// container a pure-CPU decoder can handle portably — which is exactly
+    /// what this crate promises for the `SoftwareFallback` backend.
+    fn decode_frame_software(&self, data: &[u8]) -> Result<VideoFrame, crate::MediaError> {
+        if !data.starts_with(&[0xFF, 0xD8, 0xFF]) {
+            return Err(crate::MediaError::VideoDecodeUnavailable);
+        }
+
+        let frame_end = first_jpeg_frame_end(data);
+        let mut reader = image::ImageReader::new(std::io::Cursor::new(&data[..frame_end]))
+            .with_guessed_format()
+            .map_err(|e| crate::MediaError::ImageDecode(e.to_string()))?;
+        reader.limits(decode_limits());
+
+        let img = reader
+            .decode()
+            .map_err(|e| crate::MediaError::ImageDecode(e.to_string()))?;
+        let rgba = img.to_rgba8();
+        let (width, height) = rgba.dimensions();
+
+        Ok(VideoFrame {
+            width,
+            height,
+            data: rgba.into_raw(),
+            format: ImageFormat::Rgba8,
+            presentation_timestamp_us: 0,
+        })
     }
 
     #[cfg(all(feature = "native-video-backends", target_os = "linux"))]
@@ -517,7 +590,9 @@ impl VideoDecoder {
             let mut surface_attrib = VASurfaceAttrib {
                 type_: VA_SURFACE_ATTRIB_USAGE_HINT,
                 flags: 0,
-                value: VASurfaceAttribValue { u32: VA_SURFACE_ATTRIB_USAGE_DECODE },
+                value: VASurfaceAttribValue {
+                    u32: VA_SURFACE_ATTRIB_USAGE_DECODE,
+                },
             };
             let create_surface_status = vaCreateSurfaces(
                 display,
@@ -555,7 +630,8 @@ impl VideoDecoder {
             }
 
             // Parse H.264 bitstream to create slice parameter and slice data buffers
-            let (slice_param_buffer, slice_data_buffer) = create_h264_buffers(display, context, encoded_data, width_u32, height_u32)?;
+            let (slice_param_buffer, slice_data_buffer) =
+                create_h264_buffers(display, context, encoded_data, width_u32, height_u32)?;
 
             // Begin picture
             let begin_status = vaBeginPicture(display, context, surface);
@@ -679,18 +755,20 @@ impl VideoDecoder {
 
         // Parse NAL units from the encoded data
         let nal_units = find_nal_units(encoded_data);
-        
+
         // Find SPS and PPS
         let mut sps_data = Vec::new();
         let mut pps_data = Vec::new();
         let mut slice_data = Vec::new();
-        
+
         for (start, end, nal_type) in nal_units {
-            if start >= end { continue; }
+            if start >= end {
+                continue;
+            }
             let payload = &encoded_data[start..end];
             match nal_type {
-                7 => sps_data = payload.to_vec(), // SPS
-                8 => pps_data = payload.to_vec(), // PPS
+                7 => sps_data = payload.to_vec(),               // SPS
+                8 => pps_data = payload.to_vec(),               // PPS
                 1 | 5 => slice_data.extend_from_slice(payload), // IDR/non-IDR slice
                 _ => {}
             }
@@ -742,7 +820,7 @@ impl VideoDecoder {
         (*slice_param).direct_spatial_mv_pred_flag = 1;
         (*slice_param).num_ref_idx_l0_active_minus1 = 0;
         (*slice_param).num_ref_idx_l1_active_minus1 = 0;
-        
+
         vaUnmapBuffer(display, slice_param_buf);
 
         // Create slice data buffer
@@ -772,28 +850,30 @@ impl VideoDecoder {
         pitch: usize,
         format: u32,
     ) -> Vec<u8> {
-        let yuv_data = unsafe { std::slice::from_raw_parts(yuv_ptr as *const u8, pitch * height as usize) };
+        let yuv_data =
+            unsafe { std::slice::from_raw_parts(yuv_ptr as *const u8, pitch * height as usize) };
         let mut rgba = Vec::with_capacity((width * height * 4) as usize);
 
         // Handle NV12 format (interleaved UV)
-        if format == 0x3231564E { // 'NV12'
+        if format == 0x3231564E {
+            // 'NV12'
             let y_plane = &yuv_data[..pitch * height as usize];
             let uv_plane = &yuv_data[pitch * height as usize..];
-            
+
             for y in 0..height {
                 for x in 0..width {
                     let y_idx = (y * pitch as u32 + x) as usize;
                     let uv_idx = ((y / 2) * pitch as u32 + (x / 2) * 2) as usize;
-                    
+
                     let y_val = y_plane[y_idx] as f32;
                     let u_val = uv_plane[uv_idx] as f32 - 128.0;
                     let v_val = uv_plane[uv_idx + 1] as f32 - 128.0;
-                    
+
                     // BT.601 conversion
                     let r = (y_val + 1.402 * v_val).clamp(0.0, 255.0) as u8;
                     let g = (y_val - 0.344 * u_val - 0.714 * v_val).clamp(0.0, 255.0) as u8;
                     let b = (y_val + 1.772 * u_val).clamp(0.0, 255.0) as u8;
-                    
+
                     rgba.push(r);
                     rgba.push(g);
                     rgba.push(b);
@@ -805,25 +885,25 @@ impl VideoDecoder {
             let y_size = pitch * height as usize;
             let uv_pitch = (pitch + 1) / 2;
             let uv_size = uv_pitch * (height / 2) as usize;
-            
+
             let y_plane = &yuv_data[..y_size];
             let v_plane = &yuv_data[y_size..y_size + uv_size];
             let u_plane = &yuv_data[y_size + uv_size..];
-            
+
             for y in 0..height {
                 for x in 0..width {
                     let y_idx = (y * pitch as u32 + x) as usize;
                     let uv_idx = ((y / 2) * uv_pitch as u32 + (x / 2)) as usize;
-                    
+
                     let y_val = y_plane[y_idx] as f32;
                     let u_val = u_plane[uv_idx] as f32 - 128.0;
                     let v_val = v_plane[uv_idx] as f32 - 128.0;
-                    
+
                     // BT.601 conversion
                     let r = (y_val + 1.402 * v_val).clamp(0.0, 255.0) as u8;
                     let g = (y_val - 0.344 * u_val - 0.714 * v_val).clamp(0.0, 255.0) as u8;
                     let b = (y_val + 1.772 * u_val).clamp(0.0, 255.0) as u8;
-                    
+
                     rgba.push(r);
                     rgba.push(g);
                     rgba.push(b);
@@ -866,6 +946,25 @@ mod tests {
                 image::ImageFormat::Png,
             )
             .expect("encode test PNG");
+        bytes
+    }
+
+    fn encode_jpeg(width: u32, height: u32) -> Vec<u8> {
+        let img = image::RgbaImage::from_fn(width, height, |x, y| {
+            image::Rgba([
+                (x * 255 / width.max(1)) as u8,
+                (y * 255 / height.max(1)) as u8,
+                64,
+                255,
+            ])
+        });
+        let mut bytes = Vec::new();
+        image::DynamicImage::ImageRgba8(img)
+            .write_to(
+                &mut std::io::Cursor::new(&mut bytes),
+                image::ImageFormat::Jpeg,
+            )
+            .expect("encode test JPEG");
         bytes
     }
 
@@ -919,5 +1018,43 @@ mod tests {
     fn returns_none_when_no_sps_nal_unit_is_present() {
         let data = &[0x00, 0x00, 0x00, 0x01, 0x41, 0x01, 0x02];
         assert!(parse_sps_dimensions(data).is_none());
+    }
+
+    #[test]
+    fn software_decode_decodes_a_single_mjpeg_frame() {
+        let decoder = VideoDecoder::software_only();
+        let frame = decoder
+            .decode_frame(&encode_jpeg(8, 6))
+            .expect("decode MJPEG frame");
+        assert_eq!((frame.width, frame.height), (8, 6));
+        assert_eq!(frame.data.len(), 8 * 6 * 4);
+        assert_eq!(frame.format, ImageFormat::Rgba8);
+    }
+
+    #[test]
+    fn software_decode_consumes_only_the_first_frame_of_a_stream() {
+        let stream = [encode_jpeg(8, 6).as_slice(), encode_jpeg(16, 12).as_slice()].concat();
+        let decoder = VideoDecoder::software_only();
+        let frame = decoder.decode_frame(&stream).expect("decode first frame");
+        assert_eq!((frame.width, frame.height), (8, 6));
+    }
+
+    #[test]
+    fn software_decode_rejects_non_mjpeg_input() {
+        let decoder = VideoDecoder::software_only();
+        let result = decoder.decode_frame(&[0x00, 0x00, 0x00, 0x01, 0x67, 0x42]);
+        assert!(matches!(
+            result,
+            Err(crate::MediaError::VideoDecodeUnavailable)
+        ));
+    }
+
+    #[test]
+    fn first_jpeg_frame_end_walks_marker_segments() {
+        let frame = encode_jpeg(4, 4);
+        assert_eq!(first_jpeg_frame_end(&frame), frame.len());
+        let stream = [frame.as_slice(), frame.as_slice()].concat();
+        assert_eq!(first_jpeg_frame_end(&stream), frame.len());
+        assert_eq!(first_jpeg_frame_end(&[0x00, 0x01, 0x02]), 3);
     }
 }
